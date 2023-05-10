@@ -1,5 +1,7 @@
 
-pub trait Tile: Copy+Eq+From<usize>+From<Self::Numeric> {
+use std::fmt::Debug;
+
+pub trait Tile: Copy+Eq+From<usize>+From<Self::Numeric>+Debug {
     type Numeric: Ord+Clone+Copy+PartialEq+Eq;
     const MAX: usize;
 

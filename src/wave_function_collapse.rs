@@ -141,12 +141,19 @@ where
 
     fn compute_probability(pos: UVec2, tiles: &Array2<T::Numeric>, f: &mut F, probabilities: &mut Array3<f32>) {
         let neighborhood = Neighborhood::new(tiles, pos.as_ivec2());
-        let ps = &((f)(&neighborhood));
+        let mut ps = f(&neighborhood);
 
-        let s: f32 = ps.iter().sum();
+        let mut s: f32 = ps.iter().sum();
         if ps[0] == NO_PROBABILITY || s <= 0.0 {
             // TODO: if any(ps == NO_PROBABILITY) or all(ps == 0.0), backtrack!
+            // XXX
+            println!("ps={:?}", ps);
+            println!("neigh: {:?}", neighborhood.iter_with_positions().collect::<Vec<_>>());
             todo!("Backtrack!");
+            //ps = &ps.map(|_| 1.0);
+            //ps[0] = 1.0;
+            //s = 1.0;
+            //for k in 1 .. ps.len() { ps[k] = 0.0; }
         }
 
         let ps = ps.map(|p| p / s);
