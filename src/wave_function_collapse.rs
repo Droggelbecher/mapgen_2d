@@ -1,18 +1,13 @@
-use crate::neighborhood::Neighborhood;
-use crate::coord::{UCoord2, UCoord2Conversions};
-use std::time::{Instant, Duration};
-use glam::{uvec2, UVec2, IVec2};
-use ndarray::{arr1, s, Array2, Array3, ArrayBase, Ix1, ViewRepr, Zip};
+use crate::{coord::UCoord2Conversions, neighborhood::Neighborhood, tile::Tile};
+use float_ord::FloatOrd;
+use glam::{uvec2, UVec2};
+use ndarray::{arr1, Array2, Array3, ArrayBase, Ix1, ViewRepr};
+use priority_queue::priority_queue::PriorityQueue;
 use rand::{
     distributions::{Distribution, Uniform},
     SeedableRng,
 };
-//use soil_protocol::Tile;
 use std::marker::PhantomData;
-//use ndarray::parallel::prelude::*;
-use priority_queue::priority_queue::PriorityQueue;
-use float_ord::FloatOrd;
-use crate::tile::Tile;
 
 pub trait ProbabilityCallback<T, const N: usize>: FnMut(&Neighborhood<T>) -> [f32; N] {}
 
@@ -43,7 +38,7 @@ where
     T: Tile,
 {
     pub configuration: WaveFunctionCollapseConfiguration<T, F, N>,
-    pub tiles: Array2<T::Numeric>,
+    pub tiles: Array2<T>,
     probabilities: Array3<f32>,
     entropy: PriorityQueue<UVec2, FloatOrd<f32>>,
 }
@@ -55,7 +50,6 @@ where
     F: ProbabilityCallback<T, N>,
     T: Tile,
 {
-
     pub fn generate(&mut self) {
         let mut rng = rand::rngs::StdRng::seed_from_u64(self.configuration.seed);
 
@@ -95,34 +89,35 @@ where
                     panic!();
                 }
             }
-
         }
     }
 
-
     fn set_tile(&mut self, pos: UVec2, tile: T) {
         assert!(tile.is_valid());
-        assert!(!T::from(self.tiles[pos.as_index2()]).is_valid());
+        assert!(!self.tiles[pos.as_index2()].is_valid());
 
-        self.tiles[pos.as_index2()] = tile.as_numeric();
+        self.tiles[pos.as_index2()] = tile;
 
         let neighborhood = Neighborhood::<T>::new(&self.tiles, pos.as_ivec2());
 
         // We need to recompute probabilities & entropies for all neighbors
         for neigh in neighborhood.iter_positions() {
-            if T::from(self.tiles[neigh.as_index2()]).is_valid() {
+            if self.tiles[neigh.as_index2()].is_valid() {
                 // We only care for invalid (== not-yet-determined) tiles
                 continue;
             }
 
-            Self::compute_probability(neigh, &self.tiles, &mut self.configuration.probability, &mut self.probabilities);
+            Self::compute_probability(
+                neigh,
+                &self.tiles,
+                &mut self.configuration.probability,
+                &mut self.probabilities,
+            );
             Self::compute_entropy(neigh, &self.probabilities, &mut self.entropy);
         }
 
         // Probability for this field is 1.0 for the tile we set, 0 for everything else
-        let mut ps = self
-            .probabilities
-            .slice_mut(pos.as_slice3d());
+        let mut ps = self.probabilities.slice_mut(pos.as_slice3d());
         ps.fill(0.0);
         ps[tile.as_usize()] = 1.0;
     }
@@ -134,32 +129,39 @@ where
     fn compute_probabilities(&mut self) {
         for ix in 0..self.configuration.size.x {
             for iy in 0..self.configuration.size.y {
-                Self::compute_probability((ix, iy).as_uvec2(), &self.tiles, &mut self.configuration.probability, &mut self.probabilities);
+                Self::compute_probability(
+                    (ix, iy).as_uvec2(),
+                    &self.tiles,
+                    &mut self.configuration.probability,
+                    &mut self.probabilities,
+                );
             }
         }
     }
 
-    fn compute_probability(pos: UVec2, tiles: &Array2<T::Numeric>, f: &mut F, probabilities: &mut Array3<f32>) {
+    fn compute_probability(
+        pos: UVec2,
+        tiles: &Array2<T>,
+        f: &mut F,
+        probabilities: &mut Array3<f32>,
+    ) {
         let neighborhood = Neighborhood::new(tiles, pos.as_ivec2());
-        let mut ps = f(&neighborhood);
+        let ps = f(&neighborhood);
 
-        let mut s: f32 = ps.iter().sum();
+        let s: f32 = ps.iter().sum();
         if ps[0] == NO_PROBABILITY || s <= 0.0 {
             // TODO: if any(ps == NO_PROBABILITY) or all(ps == 0.0), backtrack!
             // XXX
             println!("ps={:?}", ps);
-            println!("neigh: {:?}", neighborhood.iter_with_positions().collect::<Vec<_>>());
+            println!(
+                "neigh: {:?}",
+                neighborhood.iter_with_positions().collect::<Vec<_>>()
+            );
             todo!("Backtrack!");
-            //ps = &ps.map(|_| 1.0);
-            //ps[0] = 1.0;
-            //s = 1.0;
-            //for k in 1 .. ps.len() { ps[k] = 0.0; }
         }
 
         let ps = ps.map(|p| p / s);
-        probabilities
-            .slice_mut(pos.as_slice3d())
-            .assign(&arr1(&ps));
+        probabilities.slice_mut(pos.as_slice3d()).assign(&arr1(&ps));
     }
 
     fn compute_entropies(&mut self) {
@@ -173,7 +175,11 @@ where
         } // for ix
     }
 
-    fn compute_entropy(pos: UVec2, probabilities: &Array3<f32>, entropy: &mut PriorityQueue<UVec2, FloatOrd<f32>>) {
+    fn compute_entropy(
+        pos: UVec2,
+        probabilities: &Array3<f32>,
+        entropy: &mut PriorityQueue<UVec2, FloatOrd<f32>>,
+    ) {
         let ps = probabilities.slice(pos.as_slice3d());
         let e = -ps.mapv(|p| if p == 0.0 { 0.0 } else { p * p.log2() }).sum();
         entropy.change_priority(&pos, FloatOrd(e));
@@ -187,7 +193,7 @@ where
 {
     pub fn build(self) -> WaveFunctionCollapse<T, F, N> {
         WaveFunctionCollapse {
-            tiles: Array2::from_elem(self.size.as_index2(), T::invalid().as_numeric()),
+            tiles: Array2::from_elem(self.size.as_index2(), T::invalid()),
             entropy: Default::default(),
             probabilities: Array3::from_elem(self.size.as_index3(N), NO_PROBABILITY),
             configuration: self,

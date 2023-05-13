@@ -1,8 +1,7 @@
-use crate::coord::{UCoord2, UCoord2Conversions};
+use crate::{coord::UCoord2Conversions, tile::Tile};
 use glam::{ivec2, uvec2, IVec2, UVec2};
-use ndarray::{Array2, s};
+use ndarray::Array2;
 use std::cmp::Ord;
-use crate::tile::Tile;
 
 /// Represents the 2d neighborhood around a tile located
 /// at a certain positon in a given array.
@@ -12,7 +11,7 @@ pub struct Neighborhood<'a, T>
 where
     T: Tile,
 {
-    a: &'a Array2<T::Numeric>,
+    a: &'a Array2<T>,
     position: IVec2,
     size: UVec2,
 }
@@ -23,17 +22,15 @@ where
 {
     /// Constructor.
     /// Note that position is signed, ie. it is allowed to be outside the array area.
-    pub fn new(a: &'a Array2<T::Numeric>, position: IVec2) -> Self {
+    pub fn new(a: &'a Array2<T>, position: IVec2) -> Self {
         let size = uvec2(a.shape()[0] as u32, a.shape()[1] as u32);
 
-        Self {
-            position,
-            a,
-            size,
-        }
+        Self { position, a, size }
     }
 
-    pub fn position(&self) -> IVec2 { self.position }
+    pub fn position(&self) -> IVec2 {
+        self.position
+    }
 
     pub fn get(&self, offset: IVec2) -> Option<T> {
         assert!(offset.x >= -1 && offset.x <= 1);
@@ -49,17 +46,17 @@ where
     /// min/max tile value in the neighborhood.
     /// Ignore invalid tiles.
     /// If there are no valid tiles in the neighborhood, return `None`.
-    pub fn range(&self) -> Option<(T, T)> {
+    pub fn range(&self) -> Option<(T, T)>
+    where
+        T: Ord,
+    {
         let mut r = None;
         for neighbor in self.iter() {
             if let Some(n) = neighbor {
                 if n.is_valid() {
                     r = match r {
                         None => Some((n, n)),
-                        Some((a, b)) => Some((
-                            a.as_numeric().min(n.as_numeric()).into(),
-                            b.as_numeric().max(n.as_numeric()).into(),
-                        )),
+                        Some((a, b)) => Some((a.min(n).into(), b.max(n).into())),
                     }
                 }
             }
@@ -69,8 +66,8 @@ where
         for neighbor in self.iter() {
             if let Some(n) = neighbor {
                 if n.is_valid() {
-                    assert!(n.as_numeric() >= r.unwrap().0.as_numeric());
-                    assert!(n.as_numeric() <= r.unwrap().1.as_numeric());
+                    assert!(n >= r.unwrap().0);
+                    assert!(n <= r.unwrap().1);
                 }
             }
         }
@@ -167,6 +164,6 @@ where
         self.offset = o;
 
         let p = self.neighborhood.position + o;
-        Some(self.neighborhood.get(o).map(|t| (p.as_uvec2(), t) ))
+        Some(self.neighborhood.get(o).map(|t| (p.as_uvec2(), t)))
     }
 }

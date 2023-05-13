@@ -1,54 +1,64 @@
-
-use glam::{UVec2, uvec2};
-use ndarray::{Array2, ArrayView2};
-use crate::coord::{UCoord2, UCoord2Conversions};
+use crate::coord::UCoord2Conversions;
+use glam::UVec2;
+use ndarray::Array2;
 
 #[derive(Debug)]
 pub struct Region<T>
-    where T: Eq+Copy
+where
+    T: Eq + Copy,
 {
     pub(crate) bounding_box: Rect,
     pub(crate) reference: T,
 }
 
 impl<T> Region<T>
-    where T: Eq+Copy
+where
+    T: Eq + Copy,
 {
-    pub fn size(&self) -> UVec2 { self.bounding_box.size() }
-    pub fn top_left(&self)  -> UVec2 { self.bounding_box.top_left() }
-    pub fn bottom_right(&self)  -> UVec2 { self.bounding_box.bottom_right() }
+    pub fn size(&self) -> UVec2 {
+        self.bounding_box.size()
+    }
+    pub fn top_left(&self) -> UVec2 {
+        self.bounding_box.top_left()
+    }
+    pub fn bottom_right(&self) -> UVec2 {
+        self.bounding_box.bottom_right()
+    }
 
-    pub fn iter_indices<'a>(&self, array: &'a Array2<T>) -> impl Iterator<Item=UVec2> + 'a {
-        //assert!((array.shape()[0], array.shape()[1]) == self.size().as_index2());
-
+    pub fn iter_indices<'a>(&self, array: &'a Array2<T>) -> impl Iterator<Item = UVec2> + 'a {
         let r = self.reference;
-        RectIterator::new(self.bounding_box)
-            .filter(move |p| { array[p.as_index2()] == r })
+        RectIterator::new(self.bounding_box).filter(move |p| array[p.as_index2()] == r)
     }
 }
 
-#[derive(PartialEq,Eq,Copy,Clone,Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct Rect {
     pub(crate) anchor: UVec2,
     pub(crate) size: UVec2,
 }
 
 impl Rect {
-    pub fn size(&self) -> UVec2 { self.size }
-    pub fn top_left(&self)  -> UVec2 { self.anchor }
-    pub fn bottom_right(&self)  -> UVec2 { self.anchor + self.size }
+    pub fn size(&self) -> UVec2 {
+        self.size
+    }
+    pub fn top_left(&self) -> UVec2 {
+        self.anchor
+    }
+    pub fn bottom_right(&self) -> UVec2 {
+        self.anchor + self.size
+    }
 }
-
 
 pub struct RectIterator {
     rect: Rect,
-    next: UVec2
+    next: UVec2,
 }
 
 impl RectIterator {
     pub fn new(rect: Rect) -> Self {
         Self {
-            rect, next: rect.top_left()
+            rect,
+            next: rect.top_left(),
         }
     }
 }
@@ -71,4 +81,3 @@ impl Iterator for RectIterator {
         Some(r)
     }
 }
-
