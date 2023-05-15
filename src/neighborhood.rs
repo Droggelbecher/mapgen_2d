@@ -1,4 +1,4 @@
-use crate::{coord::UCoord2Conversions, tile::Tile};
+use crate::coord::UCoord2Conversions;
 use glam::{ivec2, uvec2, IVec2, UVec2};
 use ndarray::Array2;
 use std::cmp::Ord;
@@ -7,25 +7,28 @@ use std::cmp::Ord;
 /// at a certain positon in a given array.
 /// Generally, methods here will refer to the tiles around the given
 /// position, not including that tile itself.
-pub struct Neighborhood<'a, T>
-where
-    T: Tile,
-{
+pub struct Neighborhood<'a, T> {
     a: &'a Array2<T>,
+    valid: Option<&'a Array2<bool>>,
     position: IVec2,
     size: UVec2,
 }
 
 impl<'a, T> Neighborhood<'a, T>
-where
-    T: Tile,
+    where T: Clone+Copy
 {
     /// Constructor.
     /// Note that position is signed, ie. it is allowed to be outside the array area.
     pub fn new(a: &'a Array2<T>, position: IVec2) -> Self {
         let size = uvec2(a.shape()[0] as u32, a.shape()[1] as u32);
 
-        Self { position, a, size }
+        Self { position, a, size, valid: None }
+    }
+
+    pub fn new_with_mask(a: &'a Array2<T>, mask: &'a Array2<bool>, position: IVec2) -> Self {
+        let size = uvec2(a.shape()[0] as u32, a.shape()[1] as u32);
+
+        Self { position, a, size, valid: Some(mask) }
     }
 
     pub fn position(&self) -> IVec2 {
@@ -37,7 +40,7 @@ where
         assert!(offset.y >= -1 && offset.y <= 1);
 
         let p = self.position + offset;
-        match self.in_map(p) {
+        match self.in_map(p) && self.is_valid(p) {
             true => Some(self.a[p.as_uvec2().as_index2()].into()),
             false => None,
         }
@@ -50,33 +53,26 @@ where
     where
         T: Ord,
     {
-        let mut r = None;
-        for neighbor in self.iter() {
-            if let Some(n) = neighbor {
-                if n.is_valid() {
-                    r = match r {
-                        None => Some((n, n)),
-                        Some((a, b)) => Some((a.min(n).into(), b.max(n).into())),
-                    }
-                }
-            }
+        let mut it = self.iter().filter_map(|x| x);
+        let neighbor = match it.next() {
+            Some(x) => x,
+            None => return None,
+        };
+
+        let mut r = (neighbor, neighbor);
+
+        for neighbor in it {
+            r = (r.0.min(neighbor), r.1.max(neighbor));
         }
 
-        // Post condition
-        for neighbor in self.iter() {
-            if let Some(n) = neighbor {
-                if n.is_valid() {
-                    assert!(n >= r.unwrap().0);
-                    assert!(n <= r.unwrap().1);
-                }
-            }
-        }
-
-        r
+        Some(r)
     }
 
     /// Count the number of tiles of type `x` in the neighborhood.
-    pub fn count(&self, x: T) -> usize {
+    pub fn count(&self, x: T) -> usize
+    where
+        T: Eq,
+    {
         self.iter()
             .map(|neighbor| match neighbor {
                 Some(n) if n == x => 1,
@@ -110,6 +106,13 @@ where
     fn in_map(&self, p: IVec2) -> bool {
         Self::in_map_of_size(p, self.size)
     }
+
+    fn is_valid(&self, p: IVec2) -> bool {
+        match self.valid {
+            None => true,
+            Some(v) => v[p.as_uvec2().as_index2()],
+        }
+    }
 }
 
 const INVALID_OFFSET: IVec2 = IVec2::new(0, 0);
@@ -117,16 +120,12 @@ const FIRST_OFFSET: IVec2 = IVec2::new(0, 1);
 const LAST_OFFSET: IVec2 = IVec2::new(-1, 0);
 
 pub struct NeighborhoodIterator<'a, T>
-where
-    T: Tile,
 {
     neighborhood: &'a Neighborhood<'a, T>,
     offset: IVec2,
 }
 
 impl<'a, T> NeighborhoodIterator<'a, T>
-where
-    T: Tile,
 {
     pub fn new(neighborhood: &'a Neighborhood<'a, T>) -> Self {
         Self {
@@ -137,8 +136,7 @@ where
 }
 
 impl<'a, T> Iterator for NeighborhoodIterator<'a, T>
-where
-    T: Tile,
+    where T: Clone+Copy
 {
     /// None means "outside of map"
     type Item = Option<(UVec2, T)>;

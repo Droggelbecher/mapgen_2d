@@ -2,6 +2,10 @@ use crate::coord::UCoord2Conversions;
 use glam::UVec2;
 use ndarray::Array2;
 
+/// In a 2d array with elements of type T,
+/// this describes a region of the array in which all elements are equal to `reference`.
+/// Note that the array is not owned or borrow by this structure but instead needs to be carried
+/// along separately.
 #[derive(Debug)]
 pub struct Region<T>
 where
@@ -46,6 +50,26 @@ impl Rect {
     }
     pub fn bottom_right(&self) -> UVec2 {
         self.anchor + self.size
+    }
+    pub fn grow_to_include(&mut self, pos: UVec2) {
+        if pos.x < self.anchor.x {
+            let delta = self.anchor.x - pos.x;
+            self.anchor.x -= delta;
+            self.size.x += delta;
+        }
+        if pos.y < self.anchor.y {
+            let delta = self.anchor.y - pos.y;
+            self.anchor.y -= delta;
+            self.size.y += delta;
+        }
+        if pos.x >= self.anchor.x + self.size.x {
+            let delta = pos.x - (self.anchor.x + self.size.x) + 1;
+            self.size.x += delta;
+        }
+        if pos.y >= self.anchor.y + self.size.y {
+            let delta = pos.y - (self.anchor.y + self.size.y) + 1;
+            self.size.y += delta;
+        }
     }
 }
 

@@ -5,17 +5,17 @@ use crate::{
 use glam::{uvec2, vec2, UVec2, Vec2};
 use kd_tree::{KdPoint, KdTree};
 use ndarray::Array2;
-use std::cmp::{max, min};
 use typenum;
 
 #[derive(Clone)]
 pub struct Voronoi {
-    // TODO: turn into a builder, hide VoronoiCenter
     pub size: UVec2,
+    // TODO: hide VoronoiCenter
     pub centers: Vec<VoronoiCenter>,
-    // TODO: would it be more consistent to use a T: Tile (or more lax requirements) for tiles here?
+    // TODO: would it be more consistent to use a type param for the tiles
     pub border_marker: usize,
     pub border_coefficient: f32,
+    pub min_border_width: f32,
     pub n_lloyd_steps: usize,
 }
 
@@ -101,27 +101,18 @@ impl VoronoiResult {
                 }
 
                 let index = found[0].item.index;
+                let d1 = found[1].squared_distance.sqrt() - found[0].squared_distance.sqrt();
+                let d2 = found[2].squared_distance.sqrt() - found[0].squared_distance.sqrt();
 
-                // This is needed for the "smooth" wall.
-                // TODO: Make this more configurable
-                let d1 = found[1].squared_distance - found[0].squared_distance;
-                let d2 = found[2].squared_distance - found[0].squared_distance;
-
-                // TODO: Make configurable / dependent on expected cell size
-                if d1 * d2 >= cfg.border_coefficient * (cfg.size.x * cfg.size.y) as f32 {
+                if (d1 * d2 >= cfg.border_coefficient)
+                    && d1 >= cfg.min_border_width
+                {
                     self.map[[ix as usize, iy as usize]] = index;
 
                     let region = &mut regions[index];
                     let bbox = &mut region.bounding_box;
 
-                    bbox.anchor = uvec2(min(bbox.anchor.x, ix), min(bbox.anchor.y, iy));
-
-                    if ix >= bbox.anchor.x {
-                        bbox.size.x = max(bbox.size.x - 1, (ix - bbox.anchor.x) as u32) + 1;
-                    }
-                    if iy >= bbox.anchor.y {
-                        bbox.size.y = max(bbox.size.y - 1, (iy - bbox.anchor.y) as u32) + 1;
-                    }
+                    bbox.grow_to_include((ix, iy).as_uvec2());
                 }
             }
         }
