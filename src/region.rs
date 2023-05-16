@@ -6,7 +6,7 @@ use ndarray::Array2;
 /// this describes a region of the array in which all elements are equal to `reference`.
 /// Note that the array is not owned or borrow by this structure but instead needs to be carried
 /// along separately.
-#[derive(Debug)]
+#[derive(Debug,Clone,Copy)]
 pub struct Region<T>
 where
     T: Eq + Copy,
