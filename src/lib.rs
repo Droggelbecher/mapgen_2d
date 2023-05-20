@@ -6,7 +6,7 @@ pub mod voronoi;
 pub use voronoi::{Voronoi, VoronoiResult};
 
 pub mod wave_function_collapse;
-pub use wave_function_collapse::{WaveFunctionCollapse, WaveFunctionCollapseConfiguration};
+pub use wave_function_collapse::{WaveFunctionCollapse, WaveFunctionCollapseResult};
 
 pub mod neighborhood;
 pub use neighborhood::{Neighborhood, NeighborhoodIterator};

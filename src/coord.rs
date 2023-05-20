@@ -1,9 +1,12 @@
 
+//! Conversions for translating between (integral) coordinates such as `UVec2` and `IVec2`
+//! and 2d array indices.
+
 use num::Num;
 use glam::{uvec2, UVec2, IVec2, ivec2};
-//use std::convert::From;
 use ndarray::{s, SliceInfo, SliceInfoElem, Dim};
 
+/// Conversions to and from usizes for unsigned 2d coordinates
 pub trait UCoord2 {
     type Ordinate : Num+Clone+Copy;
 
@@ -16,6 +19,7 @@ pub trait UCoord2 {
     fn y_usize(&self) -> usize;
 }
 
+/// Conversions from usizes for unsigned 2d coordinates
 pub trait ICoord2 {
     type Ordinate : Num+Clone+Copy;
 
@@ -81,7 +85,18 @@ impl UCoord2 for (u32, u32) {
     fn y_usize(&self) -> usize { self.1 as usize }
 }
 
-
+/// Conversions to indices, slices and uvec2/ivec2 for all implementers of `UCoord`.
+/// Use like this:
+///
+/// ```
+/// use mapgen_2d::UCoord2dConversions;
+/// use ndarray::Array2;
+/// use glam::uvec2;
+///
+/// let a = Array2::zeros((10, 10));
+/// let pos = uvec2(3, 4);
+/// a[pos.as_index2()]
+/// ```
 pub trait UCoord2Conversions {
     fn as_index2(&self) -> (usize, usize);
     fn as_index3(&self, third: usize) -> (usize, usize, usize);

@@ -22,9 +22,19 @@ where
     pub fn size(&self) -> UVec2 {
         self.bounding_box.size()
     }
+
+    pub fn id(&self) -> T {
+        self.reference
+    }
+
+    pub fn bounding_box(&self) -> Rect {
+        self.bounding_box
+    }
+
     pub fn top_left(&self) -> UVec2 {
         self.bounding_box.top_left()
     }
+
     pub fn bottom_right(&self) -> UVec2 {
         self.bounding_box.bottom_right()
     }
@@ -32,6 +42,12 @@ where
     pub fn iter_indices<'a>(&self, array: &'a Array2<T>) -> impl Iterator<Item = UVec2> + 'a {
         let r = self.reference;
         RectIterator::new(self.bounding_box).filter(move |p| array[p.as_index2()] == r)
+    }
+
+    pub fn iter_relative_indices<'a>(&self, array: &'a Array2<T>) -> impl Iterator<Item = UVec2> + 'a {
+        let base = self.top_left();
+        self.iter_indices(array)
+            .map(move |p| p - base)
     }
 }
 
@@ -45,12 +61,19 @@ impl Rect {
     pub fn size(&self) -> UVec2 {
         self.size
     }
+
     pub fn top_left(&self) -> UVec2 {
         self.anchor
     }
+
     pub fn bottom_right(&self) -> UVec2 {
         self.anchor + self.size
     }
+
+    pub fn center(&self) -> UVec2 {
+        self.anchor + self.size / 2
+    }
+
     pub fn grow_to_include(&mut self, pos: UVec2) {
         if pos.x < self.anchor.x {
             let delta = self.anchor.x - pos.x;

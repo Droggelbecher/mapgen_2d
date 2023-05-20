@@ -58,6 +58,10 @@ impl VoronoiResult {
                     continue;
                 }
 
+                //if t == 0 {
+                    //continue;
+                //}
+
                 counts[t] += 1.0;
                 center_sums[t] += vec2(ix as f32 + 0.5, iy as f32 + 0.5);
             }

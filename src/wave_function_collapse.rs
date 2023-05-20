@@ -2,18 +2,16 @@ use crate::{coord::UCoord2Conversions, neighborhood::Neighborhood};
 use float_ord::FloatOrd;
 use glam::{uvec2, UVec2};
 use ndarray::{arr1, Array2, Array3, ArrayBase, Ix1, ViewRepr};
+use num_traits::FromPrimitive;
 use priority_queue::priority_queue::PriorityQueue;
 use rand::{
     distributions::{Distribution, Uniform},
     SeedableRng,
 };
 use std::marker::PhantomData;
-use num_traits::FromPrimitive;
 
-pub trait ProbabilityCallback<T, const N: usize>:
-    FnMut(&Neighborhood<T>) -> [f32; N]
-{
-}
+/// Callback returning the probability of each possible tile given its neighborhood.
+pub trait ProbabilityCallback<T, const N: usize>: FnMut(&Neighborhood<T>) -> [f32; N] {}
 
 impl<F, T, const N: usize> ProbabilityCallback<T, N> for F where
     F: FnMut(&Neighborhood<T>) -> [f32; N]
@@ -22,8 +20,7 @@ impl<F, T, const N: usize> ProbabilityCallback<T, N> for F where
 
 type DefaultProbabilityCallback<T, const N: usize> = fn(&Neighborhood<T>) -> [f32; N];
 
-// TODO: Consistent Lingo, over in map.rs we call these builders "settings"
-pub struct WaveFunctionCollapseConfiguration<T, F, const N: usize>
+pub struct WaveFunctionCollapse<T, F, const N: usize>
 where
     F: ProbabilityCallback<T, N>,
 {
@@ -32,16 +29,57 @@ where
     pub size: UVec2,
     pub probability: F,
 
-    // TODO: Hide this again
-    pub _tile: PhantomData<T>,
+    _tile: PhantomData<T>,
 }
 
-pub struct WaveFunctionCollapse<T, F, const N: usize>
+impl<T, F, const N: usize> WaveFunctionCollapse<T, F, N>
 where
     F: ProbabilityCallback<T, N>,
-    //T: Tile,
+    usize: From<T>,
+    T: FromPrimitive + std::fmt::Debug + Clone + Copy + Default,
 {
-    pub configuration: WaveFunctionCollapseConfiguration<T, F, N>,
+    pub fn new(size: UVec2, seed: u64, probability: F) -> Self {
+        Self {
+            seed, size, probability,
+            _tile: Default::default(),
+        }
+    }
+
+    pub fn build(self) -> WaveFunctionCollapseResult<T, F, N> {
+        WaveFunctionCollapseResult {
+            tiles: Array2::from_elem(self.size.as_index2(), T::default()),
+            valid: Array2::from_elem(self.size.as_index2(), false),
+            entropy: Default::default(),
+            probabilities: Array3::from_elem(self.size.as_index3(N), NO_PROBABILITY),
+            configuration: self,
+        }
+    }
+
+    pub fn generate(self) -> WaveFunctionCollapseResult<T, F, N> {
+        self.build().regenerate()
+    }
+}
+
+impl<T, const N: usize> Default
+    for WaveFunctionCollapse<T, DefaultProbabilityCallback<T, N>, N>
+where
+    T: Default,
+{
+    fn default() -> Self {
+        Self {
+            seed: 0_u64,
+            size: uvec2(100, 100),
+            probability: |_| [0.0_f32; N],
+            _tile: Default::default(),
+        }
+    }
+}
+
+pub struct WaveFunctionCollapseResult<T, F, const N: usize>
+where
+    F: ProbabilityCallback<T, N>,
+{
+    pub configuration: WaveFunctionCollapse<T, F, N>,
     pub tiles: Array2<T>,
     valid: Array2<bool>,
     probabilities: Array3<f32>,
@@ -50,13 +88,13 @@ where
 
 pub const NO_PROBABILITY: f32 = -1.0;
 
-impl<T, F, const N: usize> WaveFunctionCollapse<T, F, N>
+impl<T, F, const N: usize> WaveFunctionCollapseResult<T, F, N>
 where
     F: ProbabilityCallback<T, N>,
     usize: From<T>,
     T: FromPrimitive + std::fmt::Debug + Clone + Copy,
 {
-    pub fn generate(mut self) -> Self {
+    pub fn regenerate(mut self) -> Self {
         let mut rng = rand::rngs::StdRng::seed_from_u64(self.configuration.seed);
 
         // 1. compute all them probabilities
@@ -78,6 +116,7 @@ where
             let mut tile = None;
             for (i, p) in self.get_probabilities(target).iter().enumerate() {
                 p_sum += p;
+                println!("i={:?} p={:?} psum={:?} roll={:?}", i, p, p_sum, roll);
                 if roll <= p_sum {
                     // We shouldnt select a tile with zero probability, ever.
                     assert!(*p != 0.0);
@@ -112,14 +151,22 @@ where
         self.tiles[pos.as_index2()] = tile;
         self.valid[pos.as_index2()] = true;
 
-        let neighborhood = Neighborhood::<T>::new_with_mask(&self.tiles, &self.valid, pos.as_ivec2());
+        let neighborhood =
+            Neighborhood::<T>::new(&self.tiles, pos.as_ivec2());
+
+        println!("set_tile {:?} = {:?}", pos, tile);
 
         // We need to recompute probabilities & entropies for all neighbors
         for neigh in neighborhood.iter_positions() {
+            println!("   neighbor {:?}", neigh);
+
             if self.is_valid(neigh) {
+                println!("   (neighbor valid {:?})", neigh);
                 // We only care for invalid (== not-yet-determined) tiles
                 continue;
             }
+
+            println!("   recomputing neighbor {:?}", neigh);
 
             Self::compute_probability(
                 neigh,
@@ -175,6 +222,7 @@ where
         }
 
         let ps = ps.map(|p| p / s);
+        //println!("-> {:?}", ps);
         probabilities.slice_mut(pos.as_slice3d()).assign(&arr1(&ps));
     }
 
@@ -200,41 +248,3 @@ where
     }
 }
 
-impl<T, F, const N: usize> WaveFunctionCollapseConfiguration<T, F, N>
-where
-    F: ProbabilityCallback<T, N>,
-    //T: Clone+Default
-    //T: Tile,
-    usize: From<T>,
-    T: FromPrimitive + std::fmt::Debug + Clone + Copy + Default,
-{
-    pub fn build(self) -> WaveFunctionCollapse<T, F, N>
-    {
-        WaveFunctionCollapse {
-            tiles: Array2::from_elem(self.size.as_index2(), T::default()),
-            valid: Array2::from_elem(self.size.as_index2(), false),
-            entropy: Default::default(),
-            probabilities: Array3::from_elem(self.size.as_index3(N), NO_PROBABILITY),
-            configuration: self,
-        }
-    }
-
-    pub fn generate(self) -> WaveFunctionCollapse<T, F, N> {
-        self.build().generate()
-    }
-}
-
-impl<T, const N: usize> Default
-    for WaveFunctionCollapseConfiguration<T, DefaultProbabilityCallback<T, N>, N>
-where
-    T: Default, //T: Tile,
-{
-    fn default() -> Self {
-        Self {
-            seed: 0_u64,
-            size: uvec2(100, 100),
-            probability: |_| [0.0_f32; N],
-            _tile: Default::default(),
-        }
-    }
-}

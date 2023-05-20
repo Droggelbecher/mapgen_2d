@@ -1,3 +1,5 @@
+//! Utilities for generating "colored" noise.
+
 use ndarray::{Array2, Axis};
 use ndrustfft::{ndifft, ndifft_r2c, Complex, FftHandler, R2cFftHandler};
 use rand::{
@@ -7,9 +9,17 @@ use rand::{
 use glam::UVec2;
 use rand::rngs::StdRng;
 
+/// Generate two-dimensional noise with a power spectral density per unit of bandwidth of `f^color`.
+/// See e.g. https://en.wikipedia.org/wiki/Colors_of_noise .
+/// That is for Brownian or "red" noise, set `color = -2.0`.
 pub struct ColoredNoise {
+    /// Size of the map to generate
     pub size: UVec2,
+
+    /// "Color" of nise (exponent to frequency)
     pub color: f64,
+
+    /// Random seed to use
     pub seed: u64,
 }
 
@@ -27,8 +37,10 @@ impl ColoredNoise {
 
     // TODO: Consider making this generic by using num traits and substituting `as` keyword with
     // from/into calls
+
+    /// Generate a 2d array of size `self.size` of noise with color `self.color`.
     pub fn generate(&self) -> Array2<f64> {
-        let f_domain = self.generate_freq_domain_noise();
+        let f_domain = self.generate_frequencies();
 
         let size_x = self.size.x as usize;
         let size_y = self.size.y as usize;
@@ -59,7 +71,10 @@ impl ColoredNoise {
         r
     }
 
-    pub fn generate_freq_domain_noise(&self) -> Array2<Complex<f64>> {
+    /// Generate the frequency domain part of the noise described by `self`.
+    /// This will be called by `generate`. Usually you don't need to use this directly,
+    /// but it can be useful for debugging and visualization.
+    pub fn generate_frequencies(&self) -> Array2<Complex<f64>> {
         let size_x = self.size.x as usize;
         let size_y = self.size.y as usize;
         let color = self.color;

@@ -15,20 +15,31 @@ pub struct Neighborhood<'a, T> {
 }
 
 impl<'a, T> Neighborhood<'a, T>
-    where T: Clone+Copy
+where
+    T: Clone + Copy,
 {
     /// Constructor.
     /// Note that position is signed, ie. it is allowed to be outside the array area.
     pub fn new(a: &'a Array2<T>, position: IVec2) -> Self {
         let size = uvec2(a.shape()[0] as u32, a.shape()[1] as u32);
 
-        Self { position, a, size, valid: None }
+        Self {
+            position,
+            a,
+            size,
+            valid: None,
+        }
     }
 
     pub fn new_with_mask(a: &'a Array2<T>, mask: &'a Array2<bool>, position: IVec2) -> Self {
         let size = uvec2(a.shape()[0] as u32, a.shape()[1] as u32);
 
-        Self { position, a, size, valid: Some(mask) }
+        Self {
+            position,
+            a,
+            size,
+            valid: Some(mask),
+        }
     }
 
     pub fn position(&self) -> IVec2 {
@@ -81,6 +92,18 @@ impl<'a, T> Neighborhood<'a, T>
             .sum()
     }
 
+    pub fn has_only(&self, x: Vec<T>) -> bool
+    where
+        T: Eq,
+    {
+        self.iter()
+            .filter_map(|neighbor| match neighbor {
+                Some(n) => Some(x.contains(&n)),
+                None => None,
+            })
+            .all(|x| x)
+    }
+
     /// Iterate all neighors with their positions.
     /// Yields `None` for positions outside of the array area.
     pub fn iter_with_positions(&self) -> impl Iterator<Item = Option<(UVec2, T)>> + '_ {
@@ -119,14 +142,12 @@ const INVALID_OFFSET: IVec2 = IVec2::new(0, 0);
 const FIRST_OFFSET: IVec2 = IVec2::new(0, 1);
 const LAST_OFFSET: IVec2 = IVec2::new(-1, 0);
 
-pub struct NeighborhoodIterator<'a, T>
-{
+pub struct NeighborhoodIterator<'a, T> {
     neighborhood: &'a Neighborhood<'a, T>,
     offset: IVec2,
 }
 
-impl<'a, T> NeighborhoodIterator<'a, T>
-{
+impl<'a, T> NeighborhoodIterator<'a, T> {
     pub fn new(neighborhood: &'a Neighborhood<'a, T>) -> Self {
         Self {
             neighborhood,
@@ -136,7 +157,8 @@ impl<'a, T> NeighborhoodIterator<'a, T>
 }
 
 impl<'a, T> Iterator for NeighborhoodIterator<'a, T>
-    where T: Clone+Copy
+where
+    T: Clone + Copy,
 {
     /// None means "outside of map"
     type Item = Option<(UVec2, T)>;
@@ -162,6 +184,7 @@ impl<'a, T> Iterator for NeighborhoodIterator<'a, T>
         self.offset = o;
 
         let p = self.neighborhood.position + o;
+        //println!("- neighborhood of {:?}: {:?}", self.neighborhood.position, p);
         Some(self.neighborhood.get(o).map(|t| (p.as_uvec2(), t)))
     }
 }
