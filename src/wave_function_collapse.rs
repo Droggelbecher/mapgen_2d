@@ -244,6 +244,7 @@ where
     ) {
         let ps = probabilities.slice(pos.as_slice3d());
         let e = -ps.mapv(|p| if p == 0.0 { 0.0 } else { p * p.log2() }).sum();
+        // We assume the item is already in the queue
         entropy.change_priority(&pos, FloatOrd(e));
     }
 }

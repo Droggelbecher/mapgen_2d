@@ -1,7 +1,43 @@
-use crate::coord::UCoord2Conversions;
+use crate::{
+    coord::UCoord2Conversions,
+    region::{Rect, RectIterator},
+};
 use glam::{ivec2, uvec2, IVec2, UVec2};
 use ndarray::Array2;
 use std::cmp::Ord;
+
+pub struct NeighborPositions {
+    pub size: UVec2,
+    pub position: UVec2,
+    pub radius: u32,
+}
+
+impl NeighborPositions {
+    pub fn iter(&self) -> impl Iterator<Item = UVec2> {
+        let pos = self.position;
+        let radius = self.radius;
+        let r = ivec2(radius as i32, radius as i32);
+        let top_left = (pos.as_ivec2() - r).clamp(ivec2(0, 0), self.size.as_ivec2() - ivec2(1, 1));
+        let bottom_right = (pos.as_ivec2() + r).clamp(ivec2(0, 0), self.size.as_ivec2() - ivec2(1, 1));
+
+        RectIterator::new(Rect::from_corners(
+            top_left.as_uvec2(),
+            bottom_right.as_uvec2(),
+        ))
+        .filter(move |x| {
+            *x != pos &&
+            // Manhattan distance (no diagonal movement)
+            manhattan(*x, pos) <= radius
+        })
+    }
+}
+
+fn manhattan(a: UVec2, b: UVec2) -> u32 {
+    (a.x as i32 - b.x as i32).abs() as u32 + (a.y as i32 - b.y as i32).abs() as u32
+}
+
+// TODO: NeighborPositions is quite useful as it avoids multiply borrowing the array.
+// Either get rid of Neighborhood or implement it in terms of NeighborPositions
 
 /// Represents the 2d neighborhood around a tile located
 /// at a certain positon in a given array.
@@ -57,26 +93,37 @@ where
         }
     }
 
+    /*
+    pub fn get_mut(&self, offset: IVec2) -> Option<&mut T> {
+        assert!(offset.x >= -1 && offset.x <= 1);
+        assert!(offset.y >= -1 && offset.y <= 1);
+
+        let p = self.position + offset;
+        match self.in_map(p) && self.is_valid(p) {
+            true => Some(&mut self.a[p.as_uvec2().as_index2()]),
+            false => None,
+        }
+    }
+    */
+
     /// min/max tile value in the neighborhood.
     /// Ignore invalid tiles.
     /// If there are no valid tiles in the neighborhood, return `None`.
-    pub fn range(&self) -> Option<(T, T)>
+    pub fn min(&self) -> Option<T>
     where
         T: Ord,
     {
-        let mut it = self.iter().filter_map(|x| x);
-        let neighbor = match it.next() {
-            Some(x) => x,
-            None => return None,
-        };
+        self.iter().filter_map(|x| x).min()
+    }
 
-        let mut r = (neighbor, neighbor);
-
-        for neighbor in it {
-            r = (r.0.min(neighbor), r.1.max(neighbor));
-        }
-
-        Some(r)
+    /// min/max tile value in the neighborhood.
+    /// Ignore invalid tiles.
+    /// If there are no valid tiles in the neighborhood, return `None`.
+    pub fn max(&self) -> Option<T>
+    where
+        T: Ord,
+    {
+        self.iter().filter_map(|x| x).max()
     }
 
     /// Count the number of tiles of type `x` in the neighborhood.
@@ -110,11 +157,21 @@ where
         NeighborhoodIterator::new(&self)
     }
 
+    /*
+    pub fn iter_mut_with_positions(&'a mut self) -> impl Iterator<Item = Option<(UVec2, &'a mut T)>> + '_ {
+        NeighborhoodIteratorMut::new(self)
+    }
+    */
+
     /// Iterate tiles in the neighborhood.
     /// Yields `None` for positions outside of the array area.
     pub fn iter(&self) -> impl Iterator<Item = Option<T>> + '_ {
         self.iter_with_positions().map(|o| o.map(|(_p, v)| v))
     }
+
+    //pub fn iter_mut(&mut self) -> impl Iterator<Item = Option<&mut T>> + '_ {
+    //self.iter_mut_with_positions().map(|o| o.map(|(_p, v)| v))
+    //}
 
     /// All generated positions will be inside the map area and thus >= 0
     pub fn iter_positions(&self) -> impl Iterator<Item = UVec2> + '_ {
@@ -184,7 +241,54 @@ where
         self.offset = o;
 
         let p = self.neighborhood.position + o;
-        //println!("- neighborhood of {:?}: {:?}", self.neighborhood.position, p);
         Some(self.neighborhood.get(o).map(|t| (p.as_uvec2(), t)))
     }
 }
+
+/*
+pub struct NeighborhoodIteratorMut<'a, T> {
+    neighborhood: &'a mut Neighborhood<'a, T>,
+    offset: IVec2,
+}
+
+impl<'a, T> NeighborhoodIteratorMut<'a, T> {
+    pub fn new(neighborhood: &'a mut Neighborhood<'a, T>) -> Self {
+        Self {
+            neighborhood,
+            offset: INVALID_OFFSET,
+        }
+    }
+}
+
+impl<'a, T> Iterator for NeighborhoodIteratorMut<'a, T>
+where
+    T: Clone + Copy,
+{
+    /// None means "outside of map"
+    type Item = Option<(UVec2, &'a mut T)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut o = self.offset;
+
+        if o == LAST_OFFSET {
+            return None;
+        }
+
+        o = if o == INVALID_OFFSET {
+            FIRST_OFFSET
+        } else {
+            // Rotate by 90 degrees (CW in a RH CS)
+            // 0, 1 -> 1, 0 -> 0, -1 -> -1, 0
+            ivec2(o.y, -o.x)
+            // TODO: Actually want (optional) 45
+            // Due to the rescaling this is actually not a rotation, but we need to do a case
+            // distinction
+        };
+
+        self.offset = o;
+
+        let p = self.neighborhood.position + o;
+        Some(self.neighborhood.get_mut(o).map(|mut t| (p.as_uvec2(), t)))
+    }
+}
+*/

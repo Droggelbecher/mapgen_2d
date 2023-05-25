@@ -15,7 +15,7 @@ pub mod coord;
 pub use coord::{UCoord2, UCoord2Conversions};
 
 pub mod region;
-pub use region::Region;
+pub use region::{Region, Rect, RectIterator};
 
 pub mod tile;
 

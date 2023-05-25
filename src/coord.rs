@@ -85,6 +85,24 @@ impl UCoord2 for (u32, u32) {
     fn y_usize(&self) -> usize { self.1 as usize }
 }
 
+impl UCoord2 for Dim<[usize; 2]> {
+    type Ordinate = usize;
+
+    fn new(x: Self::Ordinate, y: Self::Ordinate) -> Self {
+        Dim([x as usize, y as usize])
+    }
+
+    fn from_usizes(x: usize, y: usize) -> Self {
+        Dim([x, y])
+    }
+
+    fn x(&self) -> Self::Ordinate { self[0] }
+    fn y(&self) -> Self::Ordinate { self[1] }
+
+    fn x_usize(&self) -> usize { self[0] as usize }
+    fn y_usize(&self) -> usize { self[1] as usize }
+}
+
 /// Conversions to indices, slices and uvec2/ivec2 for all implementers of `UCoord`.
 /// Use like this:
 ///

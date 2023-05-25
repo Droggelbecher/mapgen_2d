@@ -1,6 +1,6 @@
 use crate::coord::UCoord2Conversions;
-use glam::UVec2;
-use ndarray::Array2;
+use glam::{UVec2, uvec2};
+use ndarray::{Array2, Dim};
 
 /// In a 2d array with elements of type T,
 /// this describes a region of the array in which all elements are equal to `reference`.
@@ -58,6 +58,21 @@ pub struct Rect {
 }
 
 impl Rect {
+
+    pub fn from_shape(shape: Dim<[usize; 2]>) -> Self {
+        Self {
+            anchor: uvec2(0, 0),
+            size: uvec2(shape[0] as u32, shape[1] as u32),
+        }
+    }
+
+    pub fn from_corners(top_left: UVec2, bottom_right: UVec2) -> Self {
+        Self {
+            anchor: top_left,
+            size: bottom_right - top_left + uvec2(1, 1),
+        }
+    }
+
     pub fn size(&self) -> UVec2 {
         self.size
     }
@@ -107,6 +122,10 @@ impl RectIterator {
             rect,
             next: rect.top_left(),
         }
+    }
+
+    pub fn from_shape(shape: Dim<[usize; 2]>) -> Self {
+        Self::new(Rect::from_shape(shape))
     }
 }
 
