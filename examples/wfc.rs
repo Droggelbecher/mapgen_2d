@@ -3,7 +3,7 @@ use image::{ImageBuffer, Rgb};
 use mapgen_2d::{Neighborhood, UCoord2Conversions, WaveFunctionCollapse};
 use num_derive::FromPrimitive;
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, Debug, FromPrimitive, PartialOrd, Ord)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug, FromPrimitive, PartialOrd, Ord, Hash)]
 enum Color {
     #[default]
     NotSet = 0,
@@ -30,7 +30,7 @@ fn probability(neighbors: &Neighborhood<Color>) -> [f32; 6] {
         ps[4] = 0.01;
         ps[5] = 0.01;
     }
-    if neighbors.count(Orange) > 1 {
+    if neighbors.count(Orange) > 0 {
         ps[4] = 0.01;
         ps[5] = 0.01;
     }
@@ -38,7 +38,7 @@ fn probability(neighbors: &Neighborhood<Color>) -> [f32; 6] {
         ps[1] = 0.01;
         ps[5] = 0.01;
     }
-    if neighbors.count(Green) > 1 {
+    if neighbors.count(Green) > 0 {
         ps[1] = 0.01;
         ps[2] = 0.01;
     }
@@ -48,15 +48,18 @@ fn probability(neighbors: &Neighborhood<Color>) -> [f32; 6] {
         ps[3] = 0.01;
     }
 
-    if let Some(m) = neighbors.max() {
-        ps[m as usize] *= 10.0;
+    if let Some(c) = neighbors.most_common() {
+        ps[c as usize] *= 10.0;
     }
+
 
     ps
 }
 
 pub fn main() {
-    let result = WaveFunctionCollapse::new(uvec2(100, 100), 1234, probability).generate();
+    let result = WaveFunctionCollapse::new(uvec2(100, 100), 1234, probability)
+        .neighborhood_size(1)
+        .generate();
 
     let mut img = ImageBuffer::new(100, 100);
     for (x, y, pixel) in img.enumerate_pixels_mut() {

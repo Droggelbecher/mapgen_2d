@@ -16,6 +16,7 @@ num-traits = "*"
 priority-queue = "*"
 rand = "*"
 typenum = "*"
+counter = "*"
 
 [dev-dependencies]
 image = "*"

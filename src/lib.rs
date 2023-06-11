@@ -9,7 +9,7 @@ pub mod wave_function_collapse;
 pub use wave_function_collapse::{WaveFunctionCollapse, WaveFunctionCollapseResult};
 
 pub mod neighborhood;
-pub use neighborhood::{Neighborhood, NeighborhoodIterator};
+pub use neighborhood::Neighborhood;
 
 pub mod coord;
 pub use coord::{UCoord2, UCoord2Conversions};

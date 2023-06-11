@@ -21,14 +21,17 @@ impl<F, T, const N: usize> ProbabilityCallback<T, N> for F where
 /// Concrete type used for default probability callback
 type DefaultProbabilityCallback<T, const N: usize> = fn(&Neighborhood<T>) -> [f32; N];
 
+/// Configuration of a Wave Function Collapse run over a grid with cell type `T`,
+/// a probability callback function type `F`, `N` different options for each cell.
+#[derive(Clone)]
 pub struct WaveFunctionCollapse<T, F, const N: usize>
 where
     F: ProbabilityCallback<T, N>,
 {
-    // TODO: Consider builder pattern here rather than making these pub
-    pub seed: u64,
-    pub size: UVec2,
-    pub probability: F,
+    seed: u64,
+    size: UVec2,
+    probability: F,
+    neighborhood_size: u32,
     bomb_radius: u32,
     max_bombings: u32,
 
@@ -49,7 +52,33 @@ where
             _tile: Default::default(),
             bomb_radius: 10,
             max_bombings: 10,
+            neighborhood_size: 1,
         }
+    }
+
+    pub fn neighborhood_size(mut self, neighborhood_size: u32) -> Self {
+        self.neighborhood_size = neighborhood_size;
+        self
+    }
+
+    pub fn bomb_radius(mut self, bomb_radius: u32) -> Self {
+        self.bomb_radius = bomb_radius;
+        self
+    }
+
+    pub fn max_bombings(mut self, max_bombings: u32) -> Self {
+        self.max_bombings = max_bombings;
+        self
+    }
+
+    pub fn seed(mut self, seed: u64) -> Self {
+        self.seed = seed;
+        self
+    }
+
+    pub fn size(mut self, size: UVec2) -> Self {
+        self.size = size;
+        self
     }
 
     /// Conclude configuration and return an intermediate result in which no actual computation has
@@ -83,6 +112,7 @@ where
             _tile: Default::default(),
             bomb_radius: 10,
             max_bombings: 10,
+            neighborhood_size: 1,
         }
     }
 }
@@ -134,7 +164,6 @@ where
             let mut tile = None;
             for (i, p) in self.get_probabilities(target).iter().enumerate() {
                 p_sum += p;
-                //println!("i={:?} p={:?} psum={:?} roll={:?}", i, p, p_sum, roll);
                 if roll <= p_sum {
                     // We shouldnt select a tile with zero probability, ever.
                     assert!(*p != 0.0);
@@ -170,7 +199,7 @@ where
         self.tiles[pos.as_index2()] = tile;
         self.valid[pos.as_index2()] = true;
 
-        let neighborhood = Neighborhood::<T>::new(&self.tiles, pos.as_ivec2());
+        let neighborhood = Neighborhood::<T>::new(&self.tiles, pos.as_ivec2(), self.configuration.neighborhood_size);
 
         // We need to recompute probabilities & entropies for all neighbors
         for neigh in neighborhood.iter_positions() {
@@ -184,6 +213,7 @@ where
                 &self.tiles,
                 &mut self.configuration.probability,
                 &mut self.probabilities,
+                self.configuration.neighborhood_size
             ) {
                 return false;
             }
@@ -219,12 +249,12 @@ where
                 &self.tiles,
                 &mut self.configuration.probability,
                 &mut self.probabilities,
+                self.configuration.neighborhood_size
             ) {
                 return false;
             }
         }
 
-        //for idx in rect.iter_indices() {
         let idx = rect.top_left();
         assert!(
             self.probabilities
@@ -234,10 +264,6 @@ where
                 .count()
                 > 1
         );
-        //println!("{:?} {:?}",
-        //idx,
-        //self.probabilities.slice(idx.as_slice3d()).iter().collect::<Vec<_>>()
-        //);
 
         let idx = rect.bottom_right();
         assert!(
@@ -248,12 +274,6 @@ where
                 .count()
                 > 1
         );
-        //println!("{:?} {:?}",
-        //idx,
-        //self.probabilities.slice(idx.as_slice3d()).iter().collect::<Vec<_>>()
-        //);
-        //}
-
         true
     }
 
@@ -262,35 +282,24 @@ where
         tiles: &Array2<T>,
         f: &mut F,
         probabilities: &mut Array3<f32>,
+        neighborhood_size: u32
     ) -> bool {
-        let neighborhood = Neighborhood::new(tiles, pos.as_ivec2());
+        let neighborhood = Neighborhood::new(tiles, pos.as_ivec2(), neighborhood_size);
         let ps = f(&neighborhood);
 
         let s: f32 = ps.iter().sum();
         if ps[0] == NO_PROBABILITY || s <= 0.0 {
             println!("f({pos:?}) = {ps:?}");
             return false;
-            // TODO: if any(ps == NO_PROBABILITY) or all(ps == 0.0), backtrack!
-            // XXX
-            //println!("ps={:?}", ps);
-            //println!(
-            //"neigh: {:?}",
-            //neighborhood.iter_with_positions().collect::<Vec<_>>()
-            //);
-            //todo!("Backtrack!");
         }
 
         let ps = ps.map(|p| p / s);
-        //println!("-> {:?}", ps);
         probabilities.slice_mut(pos.as_slice3d()).assign(&arr1(&ps));
         true
     }
 
     fn backtrack(&mut self, pos: UVec2) {
-        // TODO: the radius should be user-specifiable
-        //let mut radius = 10;
         let mut radius = self.configuration.bomb_radius as u64 * 2_u64.pow(self.bombings_done);
-        //let radius = radius as u32;
 
         loop {
             println!("Backtracking around: {pos} {radius}");
@@ -312,15 +321,11 @@ where
     }
 
     fn compute_entropies(&mut self, rect: Rect) {
-        //for ix in 0..self.configuration.size.x {
-        //for iy in 0..self.configuration.size.y {
         for idx in rect.iter_indices() {
-            //let idx = (ix, iy).as_index2();
             let ps = self.probabilities.slice(idx.as_slice3d());
             let e = -ps.mapv(|p| if p == 0.0 { 0.0 } else { p * p.log2() }).sum();
             self.entropy.push(idx, FloatOrd(e));
-        } // for iy
-          //} // for ix
+        }
     }
 
     fn compute_entropy(
