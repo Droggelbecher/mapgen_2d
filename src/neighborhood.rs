@@ -2,10 +2,11 @@ use crate::{
     coord::UCoord2Conversions,
     region::{Rect, RectIterator},
 };
-use std::hash::Hash;
-use glam::{ivec2, uvec2, IVec2, UVec2};
 use counter::Counter;
+use glam::{ivec2, uvec2, IVec2, UVec2};
 use ndarray::Array2;
+use num::integer::Roots;
+use std::hash::Hash;
 
 /// Representation of a neighborhood in a 2d grid.
 pub struct NeighborPositions {
@@ -53,16 +54,26 @@ impl NeighborPositions {
             bottom_right.as_uvec2(),
         ))
         .filter(move |x| {
-            x.as_ivec2() != pos &&
-            // TODO: There may be opportunity for optimizing here as we currently
-            // iterate through the whole rect and then do this filter,
-            // not sure if a compiler can possibly be smart enough to adapt the iteration
-            // accordingly to this function
-            //
-            // Manhattan distance (no diagonal movement)
-            // TODO: Optionally allow other distance definitions
-            manhattan(x.as_ivec2() - pos) <= radius
+            x.as_ivec2() != pos //&&
+                                // TODO: There may be opportunity for optimizing here as we currently
+                                // iterate through the whole rect and then do this filter,
+                                // not sure if a compiler can possibly be smart enough to adapt the iteration
+                                // accordingly to this function
+                                //
+                                // Manhattan distance (no diagonal movement)
+                                // TODO: Optionally allow other distance definitions
+                                //D(x.as_ivec2() - pos) <= radius
         })
+    }
+
+    pub fn iter_metric<D>(&self, mut metric: D) -> impl Iterator<Item = UVec2>
+    where
+        D: FnMut(IVec2) -> u32,
+    {
+        let pos = self.position;
+        let radius = self.radius;
+
+        self.iter().filter(move |p| metric(p.as_ivec2() - pos) <= radius)
     }
 }
 
@@ -72,10 +83,95 @@ fn manhattan(a: IVec2) -> u32 {
 }
 
 // max(|x|, |y|) <= r (square)
-fn _chebyshev(a: IVec2) -> u32 {
+fn chebyshev(a: IVec2) -> u32 {
     a.x.abs().max(a.y.abs()) as u32
 }
 
+// sqrt(|x|^2 + |y|^2) <= r (disc)
+fn euclidean(a: IVec2) -> u32 {
+    (a.x.abs().pow(2) + a.y.abs().pow(2)).sqrt() as u32
+}
+
+#[test]
+fn test_neighbor_positions() {
+    let np = NeighborPositions::new(uvec2(10, 10), ivec2(-1, 8), 3);
+
+    assert_eq!(
+        np.iter().collect::<Vec<_>>(),
+        vec![
+            uvec2(0, 5),
+            uvec2(1, 5),
+            uvec2(2, 5),
+            uvec2(0, 6),
+            uvec2(1, 6),
+            uvec2(2, 6),
+            uvec2(0, 7),
+            uvec2(1, 7),
+            uvec2(2, 7),
+            uvec2(0, 8),
+            uvec2(1, 8),
+            uvec2(2, 8),
+            uvec2(0, 9),
+            uvec2(1, 9),
+            uvec2(2, 9)
+        ]
+    );
+
+    assert_eq!(
+        np.iter_metric(chebyshev).collect::<Vec<_>>(),
+        vec![
+            uvec2(0, 5),
+            uvec2(1, 5),
+            uvec2(2, 5),
+            uvec2(0, 6),
+            uvec2(1, 6),
+            uvec2(2, 6),
+            uvec2(0, 7),
+            uvec2(1, 7),
+            uvec2(2, 7),
+            uvec2(0, 8),
+            uvec2(1, 8),
+            uvec2(2, 8),
+            uvec2(0, 9),
+            uvec2(1, 9),
+            uvec2(2, 9)
+        ]
+    );
+
+    assert_eq!(
+        np.iter_metric(euclidean).collect::<Vec<_>>(),
+        vec![
+            uvec2(0, 5),
+            uvec2(1, 5),
+            uvec2(0, 6),
+            uvec2(1, 6),
+            uvec2(2, 6),
+            uvec2(0, 7),
+            uvec2(1, 7),
+            uvec2(2, 7),
+            uvec2(0, 8),
+            uvec2(1, 8),
+            uvec2(2, 8),
+            uvec2(0, 9),
+            uvec2(1, 9),
+            uvec2(2, 9)
+        ]
+    );
+
+    assert_eq!(
+        np.iter_metric(manhattan).collect::<Vec<_>>(),
+        vec![
+            uvec2(0, 6),
+            uvec2(0, 7),
+            uvec2(1, 7),
+            uvec2(0, 8),
+            uvec2(1, 8),
+            uvec2(2, 8),
+            uvec2(0, 9),
+            uvec2(1, 9),
+        ]
+    );
+}
 
 /// Represents the 2d neighborhood around a tile located
 /// at a certain positon in a given array.
@@ -125,14 +221,14 @@ where
     }
 
     pub fn most_common(&self) -> Option<T>
-        where T: Hash+Eq+PartialOrd+Ord
+    where
+        T: Hash + Eq + PartialOrd + Ord,
     {
         let counts = self.iter().collect::<Counter<_>>();
         let most_common = counts.k_most_common_ordered(1);
         if most_common.len() > 0 {
             Some(most_common[0].0)
-        }
-        else {
+        } else {
             None
         }
     }

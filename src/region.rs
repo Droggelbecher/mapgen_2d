@@ -53,27 +53,21 @@ where
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct Rect {
-    //pub(crate) anchor: UVec2,
-    //pub(crate) size: UVec2,
+    // inclusive
     top_left: UVec2,
     // inclusive
     bottom_right: UVec2,
 }
 
-// TODO: Write lots of tests for this
 impl Rect {
-
     pub fn from_shape(shape: Dim<[usize; 2]>) -> Self {
         Self::from_size(uvec2(shape[0] as u32, shape[1] as u32))
     }
 
     // Includes bottom_right
-    // TODO: Test!
     pub fn from_corners(top_left: UVec2, bottom_right: UVec2) -> Self {
         Self {
             top_left, bottom_right
-            //anchor: top_left,
-            //size: bottom_right - top_left + uvec2(1, 1),
         }
     }
 
@@ -133,6 +127,25 @@ impl Rect {
     pub fn iter_indices(&self) -> impl Iterator<Item = UVec2> {
         RectIterator::new(*self)
     }
+}
+
+#[test]
+fn test_rect_construction() {
+    let r = Rect::from_corners(uvec2(2, 3), uvec2(4, 8));
+    assert!(r.top_left == uvec2(2, 3));
+    assert!(r.bottom_right == uvec2(4, 8));
+
+    let r = Rect::from_size(uvec2(7, 8));
+    assert!(r.top_left == uvec2(0, 0));
+    assert!(r.bottom_right == uvec2(6, 7));
+
+    let r = Rect::around(uvec2(6, 7), 3);
+    assert!(r.top_left == uvec2(3, 4));
+    assert!(r.bottom_right == uvec2(9, 10));
+
+    let r = Rect::around(uvec2(6, 7), 0);
+    assert!(r.top_left == uvec2(6, 7));
+    assert!(r.bottom_right == uvec2(6, 7));
 }
 
 pub struct RectIterator {

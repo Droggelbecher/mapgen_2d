@@ -107,13 +107,13 @@ impl UCoord2 for Dim<[usize; 2]> {
 /// Use like this:
 ///
 /// ```
-/// use mapgen_2d::UCoord2dConversions;
+/// use mapgen_2d::coord::UCoord2Conversions;
 /// use ndarray::Array2;
 /// use glam::uvec2;
 ///
 /// let a = Array2::zeros((10, 10));
 /// let pos = uvec2(3, 4);
-/// a[pos.as_index2()]
+/// let v: f32 = a[pos.as_index2()];
 /// ```
 pub trait UCoord2Conversions {
     fn as_index2(&self) -> (usize, usize);
