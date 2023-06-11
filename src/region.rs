@@ -97,6 +97,7 @@ impl Rect {
             center.x.saturating_add(radius),
             center.y.saturating_add(radius),
         );
+        println!("around {center:?} {radius:?} {top_left:?} {bottom_right:?}");
         Self::from_corners(top_left, bottom_right)
     }
 
@@ -120,32 +121,11 @@ impl Rect {
     pub fn grow_to_include(&mut self, pos: UVec2) {
         self.top_left = self.top_left.min(pos);
         self.bottom_right = self.bottom_right.max(pos);
-
-        /*
-        if pos.x < self.anchor.x {
-            let delta = self.anchor.x - pos.x;
-            self.anchor.x -= delta;
-            self.size.x += delta;
-        }
-        if pos.y < self.anchor.y {
-            let delta = self.anchor.y - pos.y;
-            self.anchor.y -= delta;
-            self.size.y += delta;
-        }
-        if pos.x >= self.anchor.x + self.size.x {
-            let delta = pos.x - (self.anchor.x + self.size.x) + 1;
-            self.size.x += delta;
-        }
-        if pos.y >= self.anchor.y + self.size.y {
-            let delta = pos.y - (self.anchor.y + self.size.y) + 1;
-            self.size.y += delta;
-        }
-        */
     }
 
     pub fn intersect(&self, other: Rect) -> Self {
         Self::from_corners(
-            self.top_left().min(other.top_left()),
+            self.top_left().max(other.top_left()),
             self.bottom_right().min(other.bottom_right()),
         )
     }

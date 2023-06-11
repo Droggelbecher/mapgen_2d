@@ -29,6 +29,8 @@ where
     pub seed: u64,
     pub size: UVec2,
     pub probability: F,
+    bomb_radius: u32,
+    max_bombings: u32,
 
     _tile: PhantomData<T>,
 }
@@ -45,6 +47,8 @@ where
             size,
             probability,
             _tile: Default::default(),
+            bomb_radius: 10,
+            max_bombings: 10,
         }
     }
 
@@ -57,6 +61,7 @@ where
             entropy: Default::default(),
             probabilities: Array3::from_elem(self.size.as_index3(N), NO_PROBABILITY),
             configuration: self,
+            bombings_done: 0,
         }
     }
 
@@ -76,6 +81,8 @@ where
             size: uvec2(100, 100),
             probability: |_| [0.0_f32; N],
             _tile: Default::default(),
+            bomb_radius: 10,
+            max_bombings: 10,
         }
     }
 }
@@ -89,6 +96,7 @@ where
     valid: Array2<bool>,
     probabilities: Array3<f32>,
     entropy: PriorityQueue<UVec2, FloatOrd<f32>>,
+    bombings_done: u32,
 }
 
 pub const NO_PROBABILITY: f32 = -1.0;
@@ -105,6 +113,7 @@ where
     pub fn regenerate(mut self) -> Self {
         let mut rng = rand::rngs::StdRng::seed_from_u64(self.configuration.seed);
         let all = Rect::from_size(self.configuration.size);
+        self.bombings_done = 0;
 
         // 1. compute all them probabilities
         self.compute_probabilities(all);
@@ -215,27 +224,33 @@ where
             }
         }
 
-
         //for idx in rect.iter_indices() {
         let idx = rect.top_left();
         assert!(
-            self.probabilities.slice(idx.as_slice3d()).iter()
-            .filter(|x| **x > 0.0).count() > 1
+            self.probabilities
+                .slice(idx.as_slice3d())
+                .iter()
+                .filter(|x| **x > 0.0)
+                .count()
+                > 1
         );
         //println!("{:?} {:?}",
-            //idx,
-            //self.probabilities.slice(idx.as_slice3d()).iter().collect::<Vec<_>>()
+        //idx,
+        //self.probabilities.slice(idx.as_slice3d()).iter().collect::<Vec<_>>()
         //);
-
 
         let idx = rect.bottom_right();
         assert!(
-            self.probabilities.slice(idx.as_slice3d()).iter()
-            .filter(|x| **x > 0.0).count() > 1
+            self.probabilities
+                .slice(idx.as_slice3d())
+                .iter()
+                .filter(|x| **x > 0.0)
+                .count()
+                > 1
         );
         //println!("{:?} {:?}",
-            //idx,
-            //self.probabilities.slice(idx.as_slice3d()).iter().collect::<Vec<_>>()
+        //idx,
+        //self.probabilities.slice(idx.as_slice3d()).iter().collect::<Vec<_>>()
         //);
         //}
 
@@ -273,14 +288,22 @@ where
 
     fn backtrack(&mut self, pos: UVec2) {
         // TODO: the radius should be user-specifiable
-        let mut radius = 10;
+        //let mut radius = 10;
+        let mut radius = self.configuration.bomb_radius as u64 * 2_u64.pow(self.bombings_done);
+        //let radius = radius as u32;
+
         loop {
             println!("Backtracking around: {pos} {radius}");
-            let bomb_area = Rect::around(pos, radius).intersect(Rect::from_size(self.configuration.size));
+            let bomb_area = Rect::around(pos, radius as u32)
+                .intersect(Rect::from_size(self.configuration.size));
+            self.bombings_done += 1;
+            if self.bombings_done > self.configuration.max_bombings {
+                panic!();
+            }
+
             if !self.compute_probabilities(bomb_area) {
-                if radius < self.configuration.size.x.max(self.configuration.size.y) / 2 {
-                    radius *= 2;
-                }
+                radius = self.configuration.bomb_radius as u64 * 2_u64.pow(self.bombings_done);
+
                 continue;
             }
             self.compute_entropies(bomb_area);
