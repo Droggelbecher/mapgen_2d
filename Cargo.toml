@@ -21,3 +21,4 @@ counter = "*"
 [dev-dependencies]
 image = "*"
 num-derive = "*"
+rand = { version = "*", features = ["small_rng"] }

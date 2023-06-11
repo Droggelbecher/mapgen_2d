@@ -3,7 +3,7 @@ pub mod colored_noise;
 pub use colored_noise::ColoredNoise;
 
 pub mod voronoi;
-pub use voronoi::{Voronoi, VoronoiResult};
+pub use voronoi::{Voronoi, VoronoiResult, VoronoiTile};
 
 pub mod wave_function_collapse;
 pub use wave_function_collapse::{WaveFunctionCollapse, WaveFunctionCollapseResult};

@@ -2,33 +2,73 @@ use crate::{
     coord::UCoord2Conversions,
     region::{Rect, Region},
 };
-use glam::{uvec2, vec2, UVec2, Vec2};
+use glam::{vec2, UVec2, Vec2};
 use kd_tree::{KdPoint, KdTree};
 use ndarray::Array2;
+use rand::{
+    distributions::{Distribution, Uniform},
+    rngs::SmallRng,
+    SeedableRng,
+};
 use typenum;
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct VoronoiCell(pub usize);
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum VoronoiTile {
+    Border,
+    Cell(VoronoiCell),
+}
 
 #[derive(Clone)]
 pub struct Voronoi {
-    pub size: UVec2,
-    // TODO: hide VoronoiCenter
-    pub centers: Vec<VoronoiCenter>,
-    // TODO: would it be more consistent to use a type param for the tiles
-    pub border_marker: usize,
-    pub border_coefficient: f32,
-    pub min_border_width: f32,
-    pub n_lloyd_steps: usize,
+    size: UVec2,
+    centers: Vec<VoronoiCenter>,
+    border_coefficient: f32,
+    min_border_width: f32,
+    n_lloyd_steps: usize,
 }
 
 pub struct VoronoiResult {
     pub input_configuration: Voronoi,
     pub output_configuration: Voronoi,
-    pub map: Array2<usize>,
-    pub regions: Vec<Region<usize>>,
+    pub map: Array2<VoronoiTile>,
+    pub regions: Vec<Region<VoronoiCell>>,
 }
 
 impl Voronoi {
+    pub fn new(size: UVec2) -> Self {
+        Self {
+            size,
+            centers: Vec::new(),
+            border_coefficient: 0.0,
+            min_border_width: 0.0,
+            n_lloyd_steps: 0,
+        }
+    }
+
+    pub fn random_centers(mut self, n: usize) -> Self {
+        let mut rng = SmallRng::seed_from_u64(0);
+
+        let uniform_x = Uniform::<f32>::from(0.0..self.size.x as f32);
+        let uniform_y = Uniform::<f32>::from(0.0..self.size.y as f32);
+        self.centers = (0..n)
+            .map(|i| VoronoiCenter {
+                position: vec2(uniform_x.sample(&mut rng), uniform_y.sample(&mut rng)),
+                cell: VoronoiCell(i),
+            })
+            .collect();
+        self
+    }
+
+    pub fn border_coefficient(mut self, c: f32) -> Self {
+        self.border_coefficient = c;
+        self
+    }
+
     pub fn generate(&self) -> VoronoiResult {
-        let a = Array2::from_elem(self.size.as_index2(), self.border_marker);
+        let a = Array2::from_elem(self.size.as_index2(), VoronoiTile::Border);
         let mut r = VoronoiResult {
             output_configuration: self.clone(),
             input_configuration: self.clone(),
@@ -54,16 +94,10 @@ impl VoronoiResult {
         for ix in 0..cfg.size.x {
             for iy in 0..cfg.size.y {
                 let t = self.map[(ix, iy).as_index2()];
-                if t == cfg.border_marker {
-                    continue;
-                }
+                let VoronoiTile::Cell(cell) = t else { continue; };
 
-                //if t == 0 {
-                    //continue;
-                //}
-
-                counts[t] += 1.0;
-                center_sums[t] += vec2(ix as f32 + 0.5, iy as f32 + 0.5);
+                counts[cell.0] += 1.0;
+                center_sums[cell.0] += vec2(ix as f32 + 0.5, iy as f32 + 0.5);
             }
         }
 
@@ -73,7 +107,7 @@ impl VoronoiResult {
             .enumerate()
             .map(|(i, (s, n))| VoronoiCenter {
                 position: *s / n,
-                index: i,
+                cell: VoronoiCell(i),
             })
             .collect();
     }
@@ -83,17 +117,14 @@ impl VoronoiResult {
         let kdtree = KdTree::build_by_ordered_float(cfg.centers.clone());
 
         // TODO: assert self.map already has correct shape
-        self.map.fill(cfg.border_marker);
+        self.map.fill(VoronoiTile::Border);
 
         let mut regions: Vec<_> = cfg
             .centers
             .iter()
             .map(|c| Region {
-                bounding_box: Rect::from_corners(
-                    c.position.as_uvec2(),
-                    c.position.as_uvec2()
-                ),
-                reference: c.index,
+                bounding_box: Rect::from_corners(c.position.as_uvec2(), c.position.as_uvec2()),
+                reference: c.cell,
             })
             .collect();
 
@@ -104,16 +135,14 @@ impl VoronoiResult {
                     continue;
                 }
 
-                let index = found[0].item.index;
+                let cell = found[0].item.cell;
                 let d1 = found[1].squared_distance.sqrt() - found[0].squared_distance.sqrt();
                 let d2 = found[2].squared_distance.sqrt() - found[0].squared_distance.sqrt();
 
-                if (d1 * d2 >= cfg.border_coefficient)
-                    && d1 >= cfg.min_border_width
-                {
-                    self.map[[ix as usize, iy as usize]] = index;
+                if (d1 * d2 >= cfg.border_coefficient) && d1 >= cfg.min_border_width {
+                    self.map[[ix as usize, iy as usize]] = VoronoiTile::Cell(cell);
 
-                    let region = &mut regions[index];
+                    let region = &mut regions[cell.0];
                     let bbox = &mut region.bounding_box;
 
                     bbox.grow_to_include((ix, iy).as_uvec2());
@@ -128,7 +157,7 @@ impl VoronoiResult {
 #[derive(Clone)]
 pub struct VoronoiCenter {
     pub position: Vec2,
-    pub index: usize,
+    pub cell: VoronoiCell,
 }
 
 impl KdPoint for VoronoiCenter {

@@ -54,15 +54,7 @@ impl NeighborPositions {
             bottom_right.as_uvec2(),
         ))
         .filter(move |x| {
-            x.as_ivec2() != pos //&&
-                                // TODO: There may be opportunity for optimizing here as we currently
-                                // iterate through the whole rect and then do this filter,
-                                // not sure if a compiler can possibly be smart enough to adapt the iteration
-                                // accordingly to this function
-                                //
-                                // Manhattan distance (no diagonal movement)
-                                // TODO: Optionally allow other distance definitions
-                                //D(x.as_ivec2() - pos) <= radius
+            x.as_ivec2() != pos
         })
     }
 
@@ -78,17 +70,17 @@ impl NeighborPositions {
 }
 
 // |x| + |y| <= r (diamond)
-fn manhattan(a: IVec2) -> u32 {
+pub fn manhattan(a: IVec2) -> u32 {
     a.x.abs() as u32 + a.y.abs() as u32
 }
 
 // max(|x|, |y|) <= r (square)
-fn chebyshev(a: IVec2) -> u32 {
+pub fn chebyshev(a: IVec2) -> u32 {
     a.x.abs().max(a.y.abs()) as u32
 }
 
 // sqrt(|x|^2 + |y|^2) <= r (disc)
-fn euclidean(a: IVec2) -> u32 {
+pub fn euclidean(a: IVec2) -> u32 {
     (a.x.abs().pow(2) + a.y.abs().pow(2)).sqrt() as u32
 }
 
