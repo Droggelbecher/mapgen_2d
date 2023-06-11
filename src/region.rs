@@ -53,43 +53,75 @@ where
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct Rect {
-    pub(crate) anchor: UVec2,
-    pub(crate) size: UVec2,
+    //pub(crate) anchor: UVec2,
+    //pub(crate) size: UVec2,
+    top_left: UVec2,
+    // inclusive
+    bottom_right: UVec2,
 }
 
+// TODO: Write lots of tests for this
 impl Rect {
 
     pub fn from_shape(shape: Dim<[usize; 2]>) -> Self {
-        Self {
-            anchor: uvec2(0, 0),
-            size: uvec2(shape[0] as u32, shape[1] as u32),
-        }
+        Self::from_size(uvec2(shape[0] as u32, shape[1] as u32))
     }
 
+    // Includes bottom_right
+    // TODO: Test!
     pub fn from_corners(top_left: UVec2, bottom_right: UVec2) -> Self {
         Self {
-            anchor: top_left,
-            size: bottom_right - top_left + uvec2(1, 1),
+            top_left, bottom_right
+            //anchor: top_left,
+            //size: bottom_right - top_left + uvec2(1, 1),
         }
     }
 
+    pub fn from_size(size: UVec2) -> Self {
+        assert!(size.x != 0 && size.y != 0);
+        Self {
+            top_left: uvec2(0, 0),
+            bottom_right: size - uvec2(1, 1),
+        }
+    }
+
+    // Radius 0: Include exactly only center,
+    // Radius 1: Include the 3x3 neighborhood around center
+    // and so forth
+    pub fn around(center: UVec2, radius: u32) -> Self {
+        let top_left = uvec2(
+                        center.x.saturating_sub(radius),
+                        center.y.saturating_sub(radius)
+                    );
+        let bottom_right = uvec2(
+            center.x.saturating_add(radius),
+            center.y.saturating_add(radius),
+        );
+        Self::from_corners(top_left, bottom_right)
+    }
+
+
     pub fn size(&self) -> UVec2 {
-        self.size
+        self.bottom_right - self.top_left + uvec2(1, 1)
     }
 
     pub fn top_left(&self) -> UVec2 {
-        self.anchor
+        self.top_left
     }
 
     pub fn bottom_right(&self) -> UVec2 {
-        self.anchor + self.size
+        self.bottom_right
     }
 
     pub fn center(&self) -> UVec2 {
-        self.anchor + self.size / 2
+        self.top_left + self.size() / 2
     }
 
     pub fn grow_to_include(&mut self, pos: UVec2) {
+        self.top_left = self.top_left.min(pos);
+        self.bottom_right = self.bottom_right.max(pos);
+
+        /*
         if pos.x < self.anchor.x {
             let delta = self.anchor.x - pos.x;
             self.anchor.x -= delta;
@@ -108,6 +140,18 @@ impl Rect {
             let delta = pos.y - (self.anchor.y + self.size.y) + 1;
             self.size.y += delta;
         }
+        */
+    }
+
+    pub fn intersect(&self, other: Rect) -> Self {
+        Self::from_corners(
+            self.top_left().min(other.top_left()),
+            self.bottom_right().min(other.bottom_right()),
+        )
+    }
+
+    pub fn iter_indices(&self) -> impl Iterator<Item = UVec2> {
+        RectIterator::new(*self)
     }
 }
 
@@ -134,12 +178,12 @@ impl Iterator for RectIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         let r = self.next;
-        if r.y >= self.rect.bottom_right().y {
+        if r.y > self.rect.bottom_right().y {
             return None;
         }
 
         self.next.x += 1;
-        if self.next.x >= self.rect.bottom_right().x {
+        if self.next.x > self.rect.bottom_right().x {
             self.next.x = self.rect.top_left().x;
             self.next.y += 1;
         }

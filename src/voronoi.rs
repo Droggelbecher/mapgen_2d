@@ -89,10 +89,10 @@ impl VoronoiResult {
             .centers
             .iter()
             .map(|c| Region {
-                bounding_box: Rect {
-                    anchor: c.position.as_uvec2(),
-                    size: uvec2(1, 1),
-                },
+                bounding_box: Rect::from_corners(
+                    c.position.as_uvec2(),
+                    c.position.as_uvec2()
+                ),
                 reference: c.index,
             })
             .collect();

@@ -1,4 +1,4 @@
-use crate::{coord::UCoord2Conversions, neighborhood::Neighborhood};
+use crate::{coord::UCoord2Conversions, neighborhood::Neighborhood, region::Rect};
 use float_ord::FloatOrd;
 use glam::{uvec2, UVec2};
 use ndarray::{arr1, Array2, Array3, ArrayBase, Ix1, ViewRepr};
@@ -18,6 +18,7 @@ impl<F, T, const N: usize> ProbabilityCallback<T, N> for F where
 {
 }
 
+/// Concrete type used for default probability callback
 type DefaultProbabilityCallback<T, const N: usize> = fn(&Neighborhood<T>) -> [f32; N];
 
 pub struct WaveFunctionCollapse<T, F, const N: usize>
@@ -40,11 +41,15 @@ where
 {
     pub fn new(size: UVec2, seed: u64, probability: F) -> Self {
         Self {
-            seed, size, probability,
+            seed,
+            size,
+            probability,
             _tile: Default::default(),
         }
     }
 
+    /// Conclude configuration and return an intermediate result in which no actual computation has
+    /// been done yet.
     pub fn build(self) -> WaveFunctionCollapseResult<T, F, N> {
         WaveFunctionCollapseResult {
             tiles: Array2::from_elem(self.size.as_index2(), T::default()),
@@ -55,13 +60,13 @@ where
         }
     }
 
+    /// Conclude configuration and do the actual computation
     pub fn generate(self) -> WaveFunctionCollapseResult<T, F, N> {
         self.build().regenerate()
     }
 }
 
-impl<T, const N: usize> Default
-    for WaveFunctionCollapse<T, DefaultProbabilityCallback<T, N>, N>
+impl<T, const N: usize> Default for WaveFunctionCollapse<T, DefaultProbabilityCallback<T, N>, N>
 where
     T: Default,
 {
@@ -92,16 +97,20 @@ impl<T, F, const N: usize> WaveFunctionCollapseResult<T, F, N>
 where
     F: ProbabilityCallback<T, N>,
     usize: From<T>,
-    T: FromPrimitive + std::fmt::Debug + Clone + Copy,
+    T: FromPrimitive + std::fmt::Debug + Clone + Copy + Default,
 {
+    /// Recompute the current result with the given configuration.
+    /// I the configuration (including random seed) has not been changed,
+    /// the result should stay the same.
     pub fn regenerate(mut self) -> Self {
         let mut rng = rand::rngs::StdRng::seed_from_u64(self.configuration.seed);
+        let all = Rect::from_size(self.configuration.size);
 
         // 1. compute all them probabilities
-        self.compute_probabilities();
+        self.compute_probabilities(all);
 
         // 2. compute all entropies, find max
-        self.compute_entropies();
+        self.compute_entropies(all);
 
         loop {
             // 5. Find max entropy
@@ -116,7 +125,7 @@ where
             let mut tile = None;
             for (i, p) in self.get_probabilities(target).iter().enumerate() {
                 p_sum += p;
-                println!("i={:?} p={:?} psum={:?} roll={:?}", i, p, p_sum, roll);
+                //println!("i={:?} p={:?} psum={:?} roll={:?}", i, p, p_sum, roll);
                 if roll <= p_sum {
                     // We shouldnt select a tile with zero probability, ever.
                     assert!(*p != 0.0);
@@ -130,10 +139,11 @@ where
 
             // 4. Set tile & update surroundings
             match tile {
-                Some(t) => self.set_tile(target, t.into()),
-                None => {
-                    println!("p {:?}", self.get_probabilities(target));
-                    panic!();
+                None => panic!(),
+                Some(t) => {
+                    if !self.set_tile(target, t.into()) {
+                        self.backtrack(target);
+                    }
                 }
             }
         }
@@ -145,35 +155,30 @@ where
         self.valid[pos.as_index2()]
     }
 
-    fn set_tile(&mut self, pos: UVec2, tile: T) {
+    fn set_tile(&mut self, pos: UVec2, tile: T) -> bool {
         assert!(!self.is_valid(pos));
 
         self.tiles[pos.as_index2()] = tile;
         self.valid[pos.as_index2()] = true;
 
-        let neighborhood =
-            Neighborhood::<T>::new(&self.tiles, pos.as_ivec2());
-
-        println!("set_tile {:?} = {:?}", pos, tile);
+        let neighborhood = Neighborhood::<T>::new(&self.tiles, pos.as_ivec2());
 
         // We need to recompute probabilities & entropies for all neighbors
         for neigh in neighborhood.iter_positions() {
-            println!("   neighbor {:?}", neigh);
-
             if self.is_valid(neigh) {
-                println!("   (neighbor valid {:?})", neigh);
                 // We only care for invalid (== not-yet-determined) tiles
                 continue;
             }
 
-            println!("   recomputing neighbor {:?}", neigh);
-
-            Self::compute_probability(
+            if !Self::update_probability(
                 neigh,
                 &self.tiles,
                 &mut self.configuration.probability,
                 &mut self.probabilities,
-            );
+            ) {
+                return false;
+            }
+
             Self::compute_entropy(neigh, &self.probabilities, &mut self.entropy);
         }
 
@@ -181,60 +186,118 @@ where
         let mut ps = self.probabilities.slice_mut(pos.as_slice3d());
         ps.fill(0.0);
         ps[usize::from(tile)] = 1.0;
+        true
     }
 
     fn get_probabilities(&self, pos: UVec2) -> ArrayBase<ViewRepr<&f32>, Ix1> {
         self.probabilities.slice(pos.as_slice3d())
     }
 
-    fn compute_probabilities(&mut self) {
-        for ix in 0..self.configuration.size.x {
-            for iy in 0..self.configuration.size.y {
-                Self::compute_probability(
-                    (ix, iy).as_uvec2(),
-                    &self.tiles,
-                    &mut self.configuration.probability,
-                    &mut self.probabilities,
-                );
+    fn compute_probabilities(&mut self, rect: Rect) -> bool {
+        println!("compute_probabilities {rect:?}");
+
+        for idx in rect.iter_indices() {
+            self.tiles[idx.as_index2()] = T::default();
+            self.valid[idx.as_index2()] = false;
+        }
+
+        for idx in rect.iter_indices() {
+            // This is called once at the beginning of computation,
+            // If update_probability fails here it means some field already
+            // has no solution by definition, this should never happen.
+            if !Self::update_probability(
+                idx,
+                &self.tiles,
+                &mut self.configuration.probability,
+                &mut self.probabilities,
+            ) {
+                return false;
             }
         }
+
+
+        //for idx in rect.iter_indices() {
+        let idx = rect.top_left();
+        assert!(
+            self.probabilities.slice(idx.as_slice3d()).iter()
+            .filter(|x| **x > 0.0).count() > 1
+        );
+        //println!("{:?} {:?}",
+            //idx,
+            //self.probabilities.slice(idx.as_slice3d()).iter().collect::<Vec<_>>()
+        //);
+
+
+        let idx = rect.bottom_right();
+        assert!(
+            self.probabilities.slice(idx.as_slice3d()).iter()
+            .filter(|x| **x > 0.0).count() > 1
+        );
+        //println!("{:?} {:?}",
+            //idx,
+            //self.probabilities.slice(idx.as_slice3d()).iter().collect::<Vec<_>>()
+        //);
+        //}
+
+        true
     }
 
-    fn compute_probability(
+    fn update_probability(
         pos: UVec2,
         tiles: &Array2<T>,
         f: &mut F,
         probabilities: &mut Array3<f32>,
-    ) {
+    ) -> bool {
         let neighborhood = Neighborhood::new(tiles, pos.as_ivec2());
         let ps = f(&neighborhood);
 
         let s: f32 = ps.iter().sum();
         if ps[0] == NO_PROBABILITY || s <= 0.0 {
+            println!("f({pos:?}) = {ps:?}");
+            return false;
             // TODO: if any(ps == NO_PROBABILITY) or all(ps == 0.0), backtrack!
             // XXX
-            println!("ps={:?}", ps);
-            println!(
-                "neigh: {:?}",
-                neighborhood.iter_with_positions().collect::<Vec<_>>()
-            );
-            todo!("Backtrack!");
+            //println!("ps={:?}", ps);
+            //println!(
+            //"neigh: {:?}",
+            //neighborhood.iter_with_positions().collect::<Vec<_>>()
+            //);
+            //todo!("Backtrack!");
         }
 
         let ps = ps.map(|p| p / s);
         //println!("-> {:?}", ps);
         probabilities.slice_mut(pos.as_slice3d()).assign(&arr1(&ps));
+        true
     }
 
-    fn compute_entropies(&mut self) {
-        for ix in 0..self.configuration.size.x {
-            for iy in 0..self.configuration.size.y {
-                let idx = (ix, iy).as_index2();
-                let ps = self.probabilities.slice(idx.as_slice3d());
-                let e = -ps.mapv(|p| if p == 0.0 { 0.0 } else { p * p.log2() }).sum();
-                self.entropy.push((ix, iy).as_uvec2(), FloatOrd(e));
-            } // for iy
-        } // for ix
+    fn backtrack(&mut self, pos: UVec2) {
+        // TODO: the radius should be user-specifiable
+        let mut radius = 10;
+        loop {
+            println!("Backtracking around: {pos} {radius}");
+            let bomb_area = Rect::around(pos, radius).intersect(Rect::from_size(self.configuration.size));
+            if !self.compute_probabilities(bomb_area) {
+                if radius < self.configuration.size.x.max(self.configuration.size.y) / 2 {
+                    radius *= 2;
+                }
+                continue;
+            }
+            self.compute_entropies(bomb_area);
+            break;
+        }
+    }
+
+    fn compute_entropies(&mut self, rect: Rect) {
+        //for ix in 0..self.configuration.size.x {
+        //for iy in 0..self.configuration.size.y {
+        for idx in rect.iter_indices() {
+            //let idx = (ix, iy).as_index2();
+            let ps = self.probabilities.slice(idx.as_slice3d());
+            let e = -ps.mapv(|p| if p == 0.0 { 0.0 } else { p * p.log2() }).sum();
+            self.entropy.push(idx, FloatOrd(e));
+        } // for iy
+          //} // for ix
     }
 
     fn compute_entropy(
@@ -248,4 +311,3 @@ where
         entropy.change_priority(&pos, FloatOrd(e));
     }
 }
-

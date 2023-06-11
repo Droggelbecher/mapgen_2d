@@ -10,8 +10,10 @@ enum Color {
     Red = 1,
     Orange = 2,
     Yellow = 3,
-    Green = 4,
-    Blue = 5,
+    YGreen = 4,
+    Green = 5,
+    GBlue = 6,
+    Blue = 7,
 }
 
 impl From<Color> for usize {
@@ -20,32 +22,53 @@ impl From<Color> for usize {
     }
 }
 
-fn probability(neighbors: &Neighborhood<Color>) -> [f32; 6] {
+fn probability(neighbors: &Neighborhood<Color>) -> [f32; 8] {
     use Color::*;
 
-    let mut ps = [0.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+    let mut ps = [0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
 
-    if neighbors.count(Red) > 2 {
-        ps[3] = 0.0;
+
+    if neighbors.count(Red) > 1 {
         ps[4] = 0.0;
         ps[5] = 0.0;
+        ps[6] = 0.0;
+        ps[7] = 0.0;
     }
-    if neighbors.count(Orange) > 2 {
-        ps[4] = 0.0;
+    if neighbors.count(Orange) > 1 {
         ps[5] = 0.0;
+        ps[6] = 0.0;
+        ps[7] = 0.0;
     }
-    if neighbors.count(Yellow) > 2 {
+    if neighbors.count(Yellow) > 1 {
+        ps[6] = 0.0;
+        ps[7] = 0.0;
+    }
+    if neighbors.count(YGreen) > 1 {
         ps[1] = 0.0;
-        ps[5] = 0.0;
+        ps[7] = 0.0;
     }
-    if neighbors.count(Green) > 2 {
+    if neighbors.count(Green) > 1 {
         ps[1] = 0.0;
         ps[2] = 0.0;
     }
-    if neighbors.count(Blue) > 2 {
+    if neighbors.count(GBlue) > 1 {
         ps[1] = 0.0;
         ps[2] = 0.0;
         ps[3] = 0.0;
+    }
+    if neighbors.count(Blue) > 1 {
+        ps[1] = 0.0;
+        ps[2] = 0.0;
+        ps[3] = 0.0;
+        ps[4] = 0.0;
+    }
+
+    //if ps.iter().sum::<f32>() == 0.0 {
+    //if neighbors.position().x <= 1
+        //&& neighbors.position().y <= 1 {
+    if ps.iter().sum::<f32>() < 1.0 {
+        //ps[7] = 1.0;
+        //println!("neigh {:?} {:?}", neighbors.position(), neighbors.iter().collect::<Vec<_>>());
     }
 
     ps
@@ -61,7 +84,9 @@ pub fn main() {
             Color::Red => Rgb([255u8, 0, 0]),
             Color::Orange => Rgb([255u8, 128, 0]),
             Color::Yellow => Rgb([255u8, 255, 0]),
+            Color::YGreen => Rgb([128u8, 255, 0]),
             Color::Green => Rgb([0u8, 255, 0]),
+            Color::GBlue => Rgb([0u8, 255, 255]),
             Color::Blue => Rgb([0u8, 0, 255]),
         };
     }
