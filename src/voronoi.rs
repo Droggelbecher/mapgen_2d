@@ -137,9 +137,10 @@ impl VoronoiResult {
 
                 let cell = found[0].item.cell;
                 let d1 = found[1].squared_distance.sqrt() - found[0].squared_distance.sqrt();
-                let d2 = found[2].squared_distance.sqrt() - found[0].squared_distance.sqrt();
+                //let d2 = found[2].squared_distance.sqrt() - found[0].squared_distance.sqrt();
 
-                if (d1 * d2 >= cfg.border_coefficient) && d1 >= cfg.min_border_width {
+                //if (d1 * d2 >= cfg.border_coefficient) && d1 >= cfg.min_border_width {
+                if d1 < 100.0 {
                     self.map[[ix as usize, iy as usize]] = VoronoiTile::Cell(cell);
 
                     let region = &mut regions[cell.0];

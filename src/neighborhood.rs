@@ -9,7 +9,10 @@ use num::integer::Roots;
 use std::hash::Hash;
 
 /// Representation of a neighborhood in a 2d grid.
-pub struct NeighborPositions {
+pub struct NeighborPositions<M>
+where
+    M: FnMut(IVec2) -> u32 + Copy,
+{
     /// size of the grid
     size: UVec2,
     /// position around which this neighborhood is defined
@@ -17,14 +20,20 @@ pub struct NeighborPositions {
     position: IVec2,
     /// neighborhood radius
     radius: u32,
+    /// distance metric
+    metric: M,
 }
 
-impl NeighborPositions {
-    pub fn new(size: UVec2, position: IVec2, radius: u32) -> Self {
+impl<M> NeighborPositions<M>
+where
+    M: FnMut(IVec2) -> u32 + Copy,
+{
+    pub fn new(size: UVec2, position: IVec2, metric: M, radius: u32) -> Self {
         Self {
             size,
             position,
             radius,
+            metric
         }
     }
 
@@ -44,6 +53,7 @@ impl NeighborPositions {
     /// This will not include the position around which the neighborhood is defined.
     pub fn iter(&self) -> impl Iterator<Item = UVec2> {
         let pos = self.position;
+        let mut metric = self.metric;
         let radius = self.radius;
         let r = ivec2(radius as i32, radius as i32);
         let top_left = (pos - r).clamp(ivec2(0, 0), self.size.as_ivec2() - ivec2(1, 1));
@@ -55,17 +65,8 @@ impl NeighborPositions {
         ))
         .filter(move |x| {
             x.as_ivec2() != pos
+            && metric(x.as_ivec2() - pos) <= radius
         })
-    }
-
-    pub fn iter_metric<D>(&self, mut metric: D) -> impl Iterator<Item = UVec2>
-    where
-        D: FnMut(IVec2) -> u32,
-    {
-        let pos = self.position;
-        let radius = self.radius;
-
-        self.iter().filter(move |p| metric(p.as_ivec2() - pos) <= radius)
     }
 }
 
@@ -86,8 +87,7 @@ pub fn euclidean(a: IVec2) -> u32 {
 
 #[test]
 fn test_neighbor_positions() {
-    let np = NeighborPositions::new(uvec2(10, 10), ivec2(-1, 8), 3);
-
+    let np = NeighborPositions::new(uvec2(10, 10), ivec2(-1, 8), chebyshev, 3);
     assert_eq!(
         np.iter().collect::<Vec<_>>(),
         vec![
@@ -109,29 +109,9 @@ fn test_neighbor_positions() {
         ]
     );
 
+    let np = NeighborPositions::new(uvec2(10, 10), ivec2(-1, 8), euclidean, 3);
     assert_eq!(
-        np.iter_metric(chebyshev).collect::<Vec<_>>(),
-        vec![
-            uvec2(0, 5),
-            uvec2(1, 5),
-            uvec2(2, 5),
-            uvec2(0, 6),
-            uvec2(1, 6),
-            uvec2(2, 6),
-            uvec2(0, 7),
-            uvec2(1, 7),
-            uvec2(2, 7),
-            uvec2(0, 8),
-            uvec2(1, 8),
-            uvec2(2, 8),
-            uvec2(0, 9),
-            uvec2(1, 9),
-            uvec2(2, 9)
-        ]
-    );
-
-    assert_eq!(
-        np.iter_metric(euclidean).collect::<Vec<_>>(),
+        np.iter().collect::<Vec<_>>(),
         vec![
             uvec2(0, 5),
             uvec2(1, 5),
@@ -150,8 +130,9 @@ fn test_neighbor_positions() {
         ]
     );
 
+    let np = NeighborPositions::new(uvec2(10, 10), ivec2(-1, 8), manhattan, 3);
     assert_eq!(
-        np.iter_metric(manhattan).collect::<Vec<_>>(),
+        np.iter().collect::<Vec<_>>(),
         vec![
             uvec2(0, 6),
             uvec2(0, 7),
@@ -169,23 +150,27 @@ fn test_neighbor_positions() {
 /// at a certain positon in a given array.
 /// Generally, methods here will refer to the tiles around the given
 /// position, not including that tile itself.
-pub struct Neighborhood<'a, T> {
+pub struct Neighborhood<'a, T, M>
+where
+    M: FnMut(IVec2) -> u32 + Copy
+{
     a: &'a Array2<T>,
-    positions: NeighborPositions,
+    positions: NeighborPositions<M>,
 }
 
-impl<'a, T> Neighborhood<'a, T>
+impl<'a, T, M> Neighborhood<'a, T, M>
 where
     T: Clone + Copy,
+    M: FnMut(IVec2) -> u32 + Copy,
 {
     /// Constructor.
     /// Note that position is signed, ie. it is allowed to be outside the array area.
-    pub fn new(a: &'a Array2<T>, position: IVec2, radius: u32) -> Self {
+    pub fn new(a: &'a Array2<T>, position: IVec2, metric: M, radius: u32) -> Self {
         let size = uvec2(a.shape()[0] as u32, a.shape()[1] as u32);
 
         Self {
             a,
-            positions: NeighborPositions::new(size, position, radius),
+            positions: NeighborPositions::new(size, position, metric, radius),
         }
     }
 

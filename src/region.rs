@@ -19,6 +19,10 @@ impl<T> Region<T>
 where
     T: Eq + Copy,
 {
+    pub fn new(bounding_box: Rect, reference: T) -> Self {
+        Self { bounding_box, reference }
+    }
+
     pub fn size(&self) -> UVec2 {
         self.bounding_box.size()
     }

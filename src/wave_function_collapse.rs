@@ -1,6 +1,6 @@
-use crate::{coord::UCoord2Conversions, neighborhood::Neighborhood, region::Rect};
+use crate::{coord::UCoord2Conversions, neighborhood::{Neighborhood, chebyshev}, region::Rect};
 use float_ord::FloatOrd;
-use glam::{uvec2, UVec2};
+use glam::{uvec2, UVec2, IVec2};
 use ndarray::{arr1, Array2, Array3, ArrayBase, Ix1, ViewRepr};
 use num_traits::FromPrimitive;
 use priority_queue::priority_queue::PriorityQueue;
@@ -10,16 +10,18 @@ use rand::{
 };
 use std::marker::PhantomData;
 
+type Metric = fn(IVec2) -> u32;
+
 /// Callback returning the probability of each possible tile given its neighborhood.
-pub trait ProbabilityCallback<T, const N: usize>: FnMut(&Neighborhood<T>) -> [f32; N] {}
+pub trait ProbabilityCallback<T, const N: usize>: FnMut(&Neighborhood<T, Metric>) -> [f32; N] {}
 
 impl<F, T, const N: usize> ProbabilityCallback<T, N> for F where
-    F: FnMut(&Neighborhood<T>) -> [f32; N]
+    F: FnMut(&Neighborhood<T, Metric>) -> [f32; N],
 {
 }
 
 /// Concrete type used for default probability callback
-type DefaultProbabilityCallback<T, const N: usize> = fn(&Neighborhood<T>) -> [f32; N];
+type DefaultProbabilityCallback<T, const N: usize> = fn(&Neighborhood<T, Metric>) -> [f32; N];
 
 /// Configuration of a Wave Function Collapse run over a grid with cell type `T`,
 /// a probability callback function type `F`, `N` different options for each cell.
@@ -49,10 +51,10 @@ where
             seed,
             size,
             probability,
-            _tile: Default::default(),
             bomb_radius: 10,
             max_bombings: 10,
             neighborhood_size: 1,
+            _tile: Default::default(),
         }
     }
 
@@ -109,10 +111,10 @@ where
             seed: 0_u64,
             size: uvec2(100, 100),
             probability: |_| [0.0_f32; N],
-            _tile: Default::default(),
             bomb_radius: 10,
             max_bombings: 10,
             neighborhood_size: 1,
+            _tile: Default::default(),
         }
     }
 }
@@ -199,7 +201,7 @@ where
         self.tiles[pos.as_index2()] = tile;
         self.valid[pos.as_index2()] = true;
 
-        let neighborhood = Neighborhood::<T>::new(&self.tiles, pos.as_ivec2(), self.configuration.neighborhood_size);
+        let neighborhood = Neighborhood::<T, Metric>::new(&self.tiles, pos.as_ivec2(), chebyshev, self.configuration.neighborhood_size);
 
         // We need to recompute probabilities & entropies for all neighbors
         for neigh in neighborhood.iter_positions() {
@@ -284,7 +286,7 @@ where
         probabilities: &mut Array3<f32>,
         neighborhood_size: u32
     ) -> bool {
-        let neighborhood = Neighborhood::new(tiles, pos.as_ivec2(), neighborhood_size);
+        let neighborhood = Neighborhood::new(tiles, pos.as_ivec2(), chebyshev, neighborhood_size);
         let ps = f(&neighborhood);
 
         let s: f32 = ps.iter().sum();
