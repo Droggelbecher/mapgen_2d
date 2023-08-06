@@ -1,4 +1,5 @@
 
+/*
 use std::fmt::Debug;
 
 pub trait Tile: Copy+Eq+From<usize>+Debug {
@@ -8,3 +9,4 @@ pub trait Tile: Copy+Eq+From<usize>+Debug {
     fn is_valid(&self) -> bool;
     fn as_usize(&self) -> usize;
 }
+*/

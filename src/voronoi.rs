@@ -12,29 +12,43 @@ use rand::{
 };
 use typenum;
 
+/// Tile that belongs to a specific Voronoi cell.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct VoronoiCell(pub usize);
 
+/// A tile in a Voronoi map
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum VoronoiTile {
     Border,
     Cell(VoronoiCell),
 }
 
+/// Definition of a Voronoi segmentation
 #[derive(Clone)]
 pub struct Voronoi {
+    /// Size of the map to segment
     pub size: UVec2,
+    /// Locations of the centers of the voronoi cells
     pub centers: Vec<VoronoiCenter>,
+    /// Determines border curvature in cell corners.
+    /// 0.0 means angular borders
     pub border_coefficient: f32,
+    /// Minimum border width.
     pub min_border_width: f32,
+    /// Number of lloyd steps to conduct to equalize cell sizes.
     pub n_lloyd_steps: usize,
 }
 
+/// Output of a voronoi segmentation
 pub struct VoronoiResult {
+    /// Input definition of segmentation
     pub input_configuration: Voronoi,
+    /// Output definition (may contain eg. updated centers from Lloyd steps)
     pub output_configuration: Voronoi,
+    /// Tile map with segmentation result
     pub map: Array2<VoronoiTile>,
-    pub regions: Vec<Region<VoronoiTile>>,
+    /// Voronoi regions
+    pub regions: Vec<Region<VoronoiCell>>,
 }
 
 impl Voronoi {
@@ -48,6 +62,7 @@ impl Voronoi {
         }
     }
 
+    /// Create with random centers.
     pub fn random_centers(mut self, n: usize) -> Self {
         let mut rng = SmallRng::seed_from_u64(0);
 
@@ -62,11 +77,13 @@ impl Voronoi {
         self
     }
 
+    /// Border coefficient
     pub fn border_coefficient(mut self, c: f32) -> Self {
         self.border_coefficient = c;
         self
     }
 
+    /// Compute Voronoi segmentation.
     pub fn generate(&self) -> VoronoiResult {
         let a = Array2::from_elem(self.size.as_index2(), VoronoiTile::Border);
         let mut r = VoronoiResult {
@@ -85,6 +102,7 @@ impl Voronoi {
 }
 
 impl VoronoiResult {
+    /// Conduct a lloyd step.
     fn lloyd_step(&mut self) {
         let cfg = self.output_configuration.clone();
 
@@ -112,6 +130,7 @@ impl VoronoiResult {
             .collect();
     }
 
+    /// Compute Voronoi segmentation.
     pub fn recompute(&mut self) {
         let cfg = &self.output_configuration;
         let kdtree = KdTree::build_by_ordered_float(cfg.centers.clone());
@@ -124,7 +143,7 @@ impl VoronoiResult {
             .iter()
             .map(|c| Region {
                 bounding_box: Rect::from_corners(c.position.as_uvec2(), c.position.as_uvec2()),
-                reference: VoronoiTile::Cell(c.cell),
+                reference: c.cell,
             })
             .collect();
 
@@ -137,11 +156,9 @@ impl VoronoiResult {
 
                 let cell = found[0].item.cell;
                 let d1 = found[1].squared_distance.sqrt() - found[0].squared_distance.sqrt();
-                //let d2 = found[2].squared_distance.sqrt() - found[0].squared_distance.sqrt();
+                let d2 = found[2].squared_distance.sqrt() - found[0].squared_distance.sqrt();
 
-                //if (d1 * d2 >= cfg.border_coefficient) && d1 >= cfg.min_border_width {
-                // TODO: Remove this hardcoded magic number here
-                if d1 >= 5.0 {
+                if (d1 * d2 >= cfg.border_coefficient) && d1 >= cfg.min_border_width {
                     self.map[[ix as usize, iy as usize]] = VoronoiTile::Cell(cell);
 
                     let region = &mut regions[cell.0];
@@ -156,6 +173,7 @@ impl VoronoiResult {
     }
 }
 
+/// Center of a Voronoi cell
 #[derive(Clone)]
 pub struct VoronoiCenter {
     pub position: Vec2,

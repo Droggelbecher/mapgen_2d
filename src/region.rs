@@ -1,12 +1,12 @@
 use crate::coord::UCoord2Conversions;
-use glam::{UVec2, uvec2};
+use glam::{uvec2, UVec2};
 use ndarray::{Array2, Dim};
 
 /// In a 2d array with elements of type T,
 /// this describes a region of the array in which all elements are equal to `reference`.
 /// Note that the array is not owned or borrow by this structure but instead needs to be carried
 /// along separately.
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Region<T>
 where
     T: Eq + Copy,
@@ -19,42 +19,57 @@ impl<T> Region<T>
 where
     T: Eq + Copy,
 {
+    /// Construct region with the given bounding box that is defined by elements equaling
+    /// `reference`.
     pub fn new(bounding_box: Rect, reference: T) -> Self {
-        Self { bounding_box, reference }
+        Self {
+            bounding_box,
+            reference,
+        }
     }
 
+    /// Size of bounding box.
     pub fn size(&self) -> UVec2 {
         self.bounding_box.size()
     }
 
+    /// Return tile ID that this region is defined bind.
     pub fn id(&self) -> T {
         self.reference
     }
 
+    /// Bounding box.
     pub fn bounding_box(&self) -> Rect {
         self.bounding_box
     }
 
+    /// Top left of the bounding box.
     pub fn top_left(&self) -> UVec2 {
         self.bounding_box.top_left()
     }
 
+    /// Bottom right of the bounding box.
     pub fn bottom_right(&self) -> UVec2 {
         self.bounding_box.bottom_right()
     }
 
+    /// Iterator over indices of the region.
     pub fn iter_indices<'a>(&self, array: &'a Array2<T>) -> impl Iterator<Item = UVec2> + 'a {
         let r = self.reference;
         RectIterator::new(self.bounding_box).filter(move |p| array[p.as_index2()] == r)
     }
 
-    pub fn iter_relative_indices<'a>(&self, array: &'a Array2<T>) -> impl Iterator<Item = UVec2> + 'a {
+    /// Iterator over indices of the region relative to top left of the region.
+    pub fn iter_relative_indices<'a>(
+        &self,
+        array: &'a Array2<T>,
+    ) -> impl Iterator<Item = UVec2> + 'a {
         let base = self.top_left();
-        self.iter_indices(array)
-            .map(move |p| p - base)
+        self.iter_indices(array).map(move |p| p - base)
     }
 }
 
+/// Rectangle of indices in a 2D array.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct Rect {
     // inclusive
@@ -68,10 +83,11 @@ impl Rect {
         Self::from_size(uvec2(shape[0] as u32, shape[1] as u32))
     }
 
-    // Includes bottom_right
+    /// Includes bottom_right
     pub fn from_corners(top_left: UVec2, bottom_right: UVec2) -> Self {
         Self {
-            top_left, bottom_right
+            top_left,
+            bottom_right,
         }
     }
 
@@ -83,14 +99,14 @@ impl Rect {
         }
     }
 
-    // Radius 0: Include exactly only center,
-    // Radius 1: Include the 3x3 neighborhood around center
-    // and so forth
+    /// Radius 0: Include exactly only center,
+    /// Radius 1: Include the 3x3 neighborhood around center
+    /// and so forth
     pub fn around(center: UVec2, radius: u32) -> Self {
         let top_left = uvec2(
-                        center.x.saturating_sub(radius),
-                        center.y.saturating_sub(radius)
-                    );
+            center.x.saturating_sub(radius),
+            center.y.saturating_sub(radius),
+        );
         let bottom_right = uvec2(
             center.x.saturating_add(radius),
             center.y.saturating_add(radius),
@@ -98,7 +114,6 @@ impl Rect {
         println!("around {center:?} {radius:?} {top_left:?} {bottom_right:?}");
         Self::from_corners(top_left, bottom_right)
     }
-
 
     pub fn size(&self) -> UVec2 {
         self.bottom_right - self.top_left + uvec2(1, 1)

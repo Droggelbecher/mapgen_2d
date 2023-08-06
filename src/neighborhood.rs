@@ -28,6 +28,8 @@ impl<M> NeighborPositions<M>
 where
     M: FnMut(IVec2) -> u32 + Copy,
 {
+    /// Create new instance for a grid of total size `size` at position `position`,
+    /// the given metric and neighborhood radius.
     pub fn new(size: UVec2, position: IVec2, metric: M, radius: u32) -> Self {
         Self {
             size,
@@ -37,14 +39,17 @@ where
         }
     }
 
+    /// Size of the grid
     pub fn size(&self) -> UVec2 {
         self.size
     }
 
+    /// Position around which this neighborhood is defined
     pub fn position(&self) -> IVec2 {
         self.position
     }
 
+    /// Neighborhood radius
     pub fn radius(&self) -> u32 {
         self.radius
     }
@@ -70,17 +75,17 @@ where
     }
 }
 
-// |x| + |y| <= r (diamond)
+/// |x| + |y| <= r (diamond)
 pub fn manhattan(a: IVec2) -> u32 {
     a.x.abs() as u32 + a.y.abs() as u32
 }
 
-// max(|x|, |y|) <= r (square)
+/// max(|x|, |y|) <= r (square)
 pub fn chebyshev(a: IVec2) -> u32 {
     a.x.abs().max(a.y.abs()) as u32
 }
 
-// sqrt(|x|^2 + |y|^2) <= r (disc)
+/// sqrt(|x|^2 + |y|^2) <= r (disc)
 pub fn euclidean(a: IVec2) -> u32 {
     (a.x.abs().pow(2) + a.y.abs().pow(2)).sqrt() as u32
 }
@@ -174,10 +179,12 @@ where
         }
     }
 
+    /// Position of this neighborhood
     pub fn position(&self) -> IVec2 {
         self.positions.position()
     }
 
+    /// Get neighbor at given relative offset if that is in the array.
     pub fn get(&self, offset: IVec2) -> Option<T> {
         assert!(offset.x >= -1 && offset.x <= 1);
         assert!(offset.y >= -1 && offset.y <= 1);
@@ -197,6 +204,8 @@ where
         self.iter().filter(|n| *n == x).count()
     }
 
+    /// Return the most common tile in the neighborhood.
+    /// May not exist if there are no tiles in the neighborhood.
     pub fn most_common(&self) -> Option<T>
     where
         T: Hash + Eq + PartialOrd + Ord,
@@ -210,6 +219,7 @@ where
         }
     }
 
+    /// Return true, if all neighbors equal `x`.
     pub fn has_only(&self, x: Vec<T>) -> bool
     where
         T: Eq,
@@ -234,10 +244,12 @@ where
         self.positions.iter()
     }
 
+    /// Return true if position `p` is inside a grid of size `size`.
     fn in_map_of_size(p: IVec2, size: UVec2) -> bool {
         p.x >= 0 && p.y >= 0 && p.x < (size.x as i32) && p.y < (size.y as i32)
     }
 
+    /// Return true if `p` is in the map.
     fn in_map(&self, p: IVec2) -> bool {
         Self::in_map_of_size(p, self.positions.size)
     }
