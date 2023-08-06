@@ -64,7 +64,7 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub fn from_shape(shape: Dim<[usize; 2]>) -> Self {
+    pub fn from_raw_dim(shape: Dim<[usize; 2]>) -> Self {
         Self::from_size(uvec2(shape[0] as u32, shape[1] as u32))
     }
 
@@ -166,7 +166,7 @@ impl RectIterator {
     }
 
     pub fn from_shape(shape: Dim<[usize; 2]>) -> Self {
-        Self::new(Rect::from_shape(shape))
+        Self::new(Rect::from_size(shape.as_uvec2()))
     }
 }
 

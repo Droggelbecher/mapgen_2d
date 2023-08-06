@@ -286,7 +286,7 @@ where
         probabilities: &mut Array3<f32>,
         neighborhood_size: u32
     ) -> bool {
-        let neighborhood = Neighborhood::new(tiles, pos.as_ivec2(), chebyshev, neighborhood_size);
+        let neighborhood = Neighborhood::<'_, T, fn(IVec2) -> u32>::new(tiles, pos.as_ivec2(), chebyshev, neighborhood_size);
         let ps = f(&neighborhood);
 
         let s: f32 = ps.iter().sum();
