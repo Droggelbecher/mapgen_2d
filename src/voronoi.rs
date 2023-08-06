@@ -23,18 +23,18 @@ pub enum VoronoiTile {
 
 #[derive(Clone)]
 pub struct Voronoi {
-    size: UVec2,
-    centers: Vec<VoronoiCenter>,
-    border_coefficient: f32,
-    min_border_width: f32,
-    n_lloyd_steps: usize,
+    pub size: UVec2,
+    pub centers: Vec<VoronoiCenter>,
+    pub border_coefficient: f32,
+    pub min_border_width: f32,
+    pub n_lloyd_steps: usize,
 }
 
 pub struct VoronoiResult {
     pub input_configuration: Voronoi,
     pub output_configuration: Voronoi,
     pub map: Array2<VoronoiTile>,
-    pub regions: Vec<Region<VoronoiCell>>,
+    pub regions: Vec<Region<VoronoiTile>>,
 }
 
 impl Voronoi {
@@ -124,7 +124,7 @@ impl VoronoiResult {
             .iter()
             .map(|c| Region {
                 bounding_box: Rect::from_corners(c.position.as_uvec2(), c.position.as_uvec2()),
-                reference: c.cell,
+                reference: VoronoiTile::Cell(c.cell),
             })
             .collect();
 
